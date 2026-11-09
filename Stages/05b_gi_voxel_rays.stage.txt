@@ -1,0 +1,19 @@
+
+[ Stages : 1 ]
+{ Name:s          }
+//---------------
+  "gi_voxel_rays"
+
+[ StagePasses : 1 ]
+{ Stage:d  Name:s           Kernel:s  Size:s       Push:s  RenderPass:s  Repeat:s  RepeatSlot:d  Items:s  UBOs:s  Recorder:s      }
+//-------  ---------------  --------  -----------  ------  ------------  --------  ------------  -------  ------  ---------------
+     0     "GI voxel rays"     ""     "view.size"    ""         ""          ""          -1         ""       ""    "gi.voxel_rays"
+
+[ StageBindings : 5 ]
+{ Stage:d  Pass:d  Kind:s     Name:s                             Life:s      Usage:s    Write:c  Policy:s   If:s }
+//-------  ------  ---------  ---------------------------------  ----------  ---------  -------  ---------  ----
+     0       0     "buffer"   "Rays: *"                          "retained"  "storage"     0     "none"      "" 
+     0       0     "buffer"   "GI: world data"                   "retained"  "storage"     0     "none"      "" 
+     0       0     "buffer"   "GI: device-local data"            "retained"  "storage"     0     "none"      "" 
+     0       0     "buffer"   "GI: voxel store"                  "retained"  "storage"     1     "partial"   "" 
+     0       0     "texture"  "Render target: last frame's HDR"  "retained"  "storage"     0     "none"      "" 
