@@ -14,7 +14,7 @@
 
 namespace xrender_graph
 {
-    inline constexpr int bundle_version_v = 6;      // the root's format (2: the PostGraph table's Custom column; 3: ShaderWords; 4: the custom nodes' Params column; 5: the stages; 6: StagesOff)
+    inline constexpr int bundle_version_v = 7;      // the root's format (2: the PostGraph table's Custom column; 3: ShaderWords; 4: the custom nodes' Params column; 5: the stages; 6: StagesOff; 7: StageParams)
     inline constexpr int node_abi_v       = 1;      // the node contract the root was compiled against (the built-in post nodes)
 
     struct bundle
@@ -26,6 +26,7 @@ namespace xrender_graph
         xlionrender::post::desc     m_Desc;
         xlionrender::stage::library m_Stages;       // the frame stages by name, in place of the renderer's built-in descriptions
         std::vector<std::string>    m_StagesOff;    // the stages bypassed (xlionrender::stage::bypassable_v)
+        std::vector<xlionrender::stage::param> m_StageParams;     // the stages' parameters it sets (frame values that win over the code's)
 
         // Problem: why the bundle cannot be used (a version or ABI this build does not know, a node row refused)
         xerr Serialize(xtextfile::stream& F, std::string& Problem) noexcept
@@ -48,9 +49,12 @@ namespace xrender_graph
             }
             if (auto Err = xlionrender::post::Serialize(F, m_Desc, Problem); Err || !Problem.empty()) return Err;
             if (auto Err = xlionrender::stage::Serialize(F, m_Stages, Problem); Err || !Problem.empty()) return Err;
-            return F.Record("StagesOff"
+            if (auto Err = F.Record("StagesOff"
                 , [&](std::size_t& Count, xerr&) { if (F.isReading()) m_StagesOff.resize(Count); else Count = m_StagesOff.size(); }
-                , [&](std::size_t i, xerr& E) { E = F.Field("Name", m_StagesOff[i]); });
+                , [&](std::size_t i, xerr& E) { E = F.Field("Name", m_StagesOff[i]); }); Err) return Err;
+            return F.Record("StageParams"
+                , [&](std::size_t& Count, xerr&) { if (F.isReading()) m_StageParams.resize(Count); else Count = m_StageParams.size(); }
+                , [&](std::size_t i, xerr& E) { auto& P = m_StageParams[i]; false || (E = F.Field("Name", P.m_Name)) || (E = F.Field("Type", P.m_Type)) || (E = F.Field("Value", P.m_Value)); });
         }
     };
 }

@@ -80,6 +80,20 @@ namespace xrender_graph
     };
     XPROPERTY_REG(stage_entry)
 
+    // A stage parameter the graph sets (xlionrender::stage::parameters_v): it wins over what the frame's code would push
+    struct stage_param_entry
+    {
+        std::string m_Name;
+        float       m_Value = 0;
+
+        XPROPERTY_DEF
+        ( "RenderGraphStageParam", stage_param_entry
+        , obj_member<"Name",  &stage_param_entry::m_Name,  member_help<"The parameter (ao.radius, ao.thickness, refl.ssr_steps, refl.ssr_max_dist, refl.ssr_thickness)">>
+        , obj_member<"Value", &stage_param_entry::m_Value, member_help<"Its value (a count is rounded down)">>
+        )
+    };
+    XPROPERTY_REG(stage_param_entry)
+
     struct descriptor : xresource_pipeline::descriptor::base
     {
         descriptor() noexcept { FromDesc(post::desc::Default()); }
@@ -87,6 +101,7 @@ namespace xrender_graph
         void Validate(std::vector<std::string>& Errors) const noexcept override
         {
             if (const auto P = post::Lower(ToDesc(), 64, 64); !P.m_Error.empty()) Errors.push_back(P.m_Error);
+            for (const auto& P : m_StageParams) if (!xlionrender::stage::Parameter(P.m_Name)) Errors.push_back(std::format("the stage parameter '{}' is not one (ao.radius, ao.thickness, refl.ssr_steps, refl.ssr_max_dist, refl.ssr_thickness)", P.m_Name));
             for (const auto& S : m_Stages) if (!xlionrender::stage::Bypassable(S.m_Name)) Errors.push_back(std::format("the stage '{}' cannot be bypassed (refl_ssr, refl_recon, ao, light_tiles)", S.m_Name));     // (the renderer's own check: a size of 64 x 64 checks the structure)
         }
 
@@ -112,12 +127,14 @@ namespace xrender_graph
         std::vector<node_entry>  m_Nodes;       // in order: TAA first, the tone map last, one of each
         std::vector<param_entry> m_Params;
         std::vector<stage_entry> m_Stages;      // the frame stages set off (the Graph panel's checkboxes)
+        std::vector<stage_param_entry> m_StageParams;      // the stages' parameters it sets
 
         XPROPERTY_VDEF
         ( "RenderGraph", descriptor
         , obj_member<"Nodes",  &descriptor::m_Nodes,  member_ui_open<true>, member_help<"The post chain in order (TAA first, ToneMap last, each once). The Post chain view of the Render Graph drawer tab shows what it expands to">>
         , obj_member<"Params", &descriptor::m_Params, member_help<"The values the nodes push, where a frame reads each and its range">>
         , obj_member<"Stages", &descriptor::m_Stages, member_help<"The frame stages bypassed (the Graph panel's green nodes: their checkboxes)">>
+        , obj_member<"StageParams", &descriptor::m_StageParams, member_help<"The stages' parameters set here (ao.radius, refl.ssr_steps, ...): they win over the frame's own">>
         )
     };
     XPROPERTY_VREG(descriptor)
