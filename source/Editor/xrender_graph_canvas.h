@@ -7,10 +7,13 @@
 //      TAA          HDR -> Image                  Bloom     Image -> Bloom
 //      Exposure     Image -> Exposure             ToneMap   Image, Bloom, Exposure -> Output
 // "Image" is the chain's image: the last node before that makes one (TAA), else the lit HDR. A bypassed node is drawn faded and makes
-// nothing: its consumers read what is there without it. Read only (the inspector edits): right drag pans.
+// nothing: its consumers read what is there without it. Editing: a node's checkbox bypasses it, right click a node for remove, move,
+// insert after (only the types that keep the chain valid); every edit is one undoable descriptor edit (EditFn: post::Edit's text, its reply).
+// Right drag pans.
 #include "dependencies/xgraph/source/xgraph_routes.h"
 #include "plugins/xrender_graph.plugin/source/Module/xrender_graph_descriptor.h"
 #include "dependencies/imgui/imgui.h"
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -22,7 +25,8 @@ namespace xrender_graph_editor::canvas
 
     struct step { std::string m_Name; std::vector<std::string> m_In, m_Out; bool m_bOn = true; };
 
-    struct state { ImVec2 m_Pan{ 0, 0 }; };
+    struct state { ImVec2 m_Pan{ 0, 0 }; int m_Menu = -1; std::string m_LastReply; };
+    using edit_fn = std::function<std::string(const std::string&)>;      // post::Edit's text ("bypass 1 0") -> "ok" or why not
 
     // The chain's steps (an "HDR" source first: the lit image the chain starts from) and its wires
     inline void Build(const post::desc& D, std::vector<step>& Steps, std::vector<gl::edge>& Edges) noexcept
@@ -49,14 +53,15 @@ namespace xrender_graph_editor::canvas
         }
     }
 
-    inline void Draw(state& S, const post::desc& D) noexcept
+    inline void Draw(state& S, const post::desc& D, const edit_fn& EditFn) noexcept
     {
+        const auto Send = [&](const std::string& Edit) { S.m_LastReply = Edit + ": " + EditFn(Edit); };
         std::vector<step> Steps; std::vector<gl::edge> Edges;
         Build(D, Steps, Edges);
         gl::input In(1);
         for (const auto& St : Steps)
         {
-            float W = ImGui::CalcTextSize(St.m_Name.c_str()).x + 16;
+            float W = ImGui::CalcTextSize((St.m_bOn ? St.m_Name : St.m_Name + " (bypassed)").c_str()).x + 16 + 26;     // (+ the bypass checkbox)
             const std::size_t nRows = std::max(St.m_In.size(), St.m_Out.size());
             for (std::size_t r = 0; r < nRows; ++r)
                 W = std::max(W, (r < St.m_In.size() ? ImGui::CalcTextSize(St.m_In[r].c_str()).x : 0.0f) + (r < St.m_Out.size() ? ImGui::CalcTextSize(St.m_Out[r].c_str()).x : 0.0f) + gl::geo::MID_GAP);
@@ -93,9 +98,38 @@ namespace xrender_graph_editor::canvas
                 pDL->AddText(ImVec2(b.x - 8 - ImGui::CalcTextSize(St.m_Out[r].c_str()).x, y - 7), ImGui::GetColorU32(kText), St.m_Out[r].c_str());
             }
             ImGui::PopStyleVar();
+            if (i == 0) continue;           // (the lit image: not a node)
+            const int n = static_cast<int>(i) - 1;
+            ImGui::PushID(n);
+            // the bypass checkbox in the header's right corner; the header and body: right click for the node's menu
+            ImGui::SetCursorScreenPos(ImVec2(b.x - 22, a.y + 4));
+            bool bOn = St.m_bOn;
+            if (ImGui::Checkbox("##on", &bOn)) Send(std::format("bypass {} {}", n, bOn ? 1 : 0));
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip(bOn ? "On: uncheck to bypass it (kept in the chain, left out of the frame)" : "Bypassed: check to put it back");
+            ImGui::SetCursorScreenPos(a);
+            ImGui::InvisibleButton("##body", ImVec2(std::max(1.0f, B.m_W - 26), B.m_H), ImGuiButtonFlags_MouseButtonRight);
+            if (ImGui::IsItemClicked(ImGuiMouseButton_Right)) { S.m_Menu = n; ImGui::OpenPopup("##node"); }
+            if (ImGui::BeginPopup("##node"))
+            {
+                ImGui::TextDisabled("%s", St.m_Name.c_str());
+                if (ImGui::MenuItem(St.m_bOn ? "Bypass" : "Turn on")) Send(std::format("bypass {} {}", n, St.m_bOn ? 0 : 1));
+                if (ImGui::MenuItem("Remove")) Send(std::format("remove {}", n));
+                if (ImGui::MenuItem("Move earlier", nullptr, false, n > 0)) Send(std::format("move {} {}", n, n - 1));
+                if (ImGui::MenuItem("Move later", nullptr, false, n + 1 < static_cast<int>(D.m_Nodes.size()))) Send(std::format("move {} {}", n, n + 2));
+                const auto Types = post::Insertable(D, n + 1);
+                if (ImGui::BeginMenu("Insert after", !Types.empty()))
+                {
+                    for (const auto T : Types) if (ImGui::MenuItem(std::string(post::node_names_v[std::size_t(T)]).c_str())) Send(std::format("insert {} {}", n + 1, post::node_names_v[std::size_t(T)]));
+                    ImGui::EndMenu();
+                }
+                if (Types.empty() && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) ImGui::SetTooltip("Nothing fits after it (each node once; TAA first, the tone map last)");
+                ImGui::EndPopup();
+            }
+            ImGui::PopID();
         }
         ImGui::SetCursorScreenPos(ImVec2(ImGui::GetWindowPos().x + 8, ImGui::GetWindowPos().y + ImGui::GetWindowHeight() - 24));
-        ImGui::TextDisabled("Read only: the inspector edits (On bypasses a node). Right drag pans.");
+        if (!S.m_LastReply.empty()) ImGui::TextColored(S.m_LastReply.ends_with(": ok") ? ImVec4(0.6f, 0.6f, 0.6f, 1) : ImVec4(1.0f, 0.62f, 0.25f, 1), "%s", S.m_LastReply.c_str());
+        else ImGui::TextDisabled("Right click a node: bypass, remove, move, insert after. Its checkbox bypasses it. Right drag pans.");
         ImGui::EndChild();
     }
 }

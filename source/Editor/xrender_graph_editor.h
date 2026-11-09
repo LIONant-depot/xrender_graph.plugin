@@ -14,6 +14,23 @@ namespace xrender_graph_editor
     struct session : xeditor::descriptor_editor
     {
         canvas::state m_Canvas;
+
+        // An edit of the chain (post::Edit's text) as one undoable descriptor edit: the same SnapshotEdit an inspector array edit makes
+        // (the console shows it, Ctrl+Z undoes it). A chain the renderer could not lower is refused, nothing changes
+        std::string GraphEdit(const std::string& Edit) noexcept
+        {
+            auto& D = static_cast<xrender_graph::descriptor&>(*m_Document.m_pDescriptor);
+            auto Desc = D.ToDesc();
+            std::string Message;
+            if (!xlionrender::post::Edit(Desc, Edit, Message)) return Message;
+            xproperty::settings::context C;
+            const auto Before = xproperty::ui::undo::SnapshotToString(*D.getProperties(), &D, C);
+            D.FromDesc(Desc);
+            const auto After = xproperty::ui::undo::SnapshotToString(*D.getProperties(), &D, C);
+            xproperty::ui::undo::ApplySnapshotFromString(*D.getProperties(), &D, Before, C);       // (the command applies it: undo has the before)
+            if (auto Err = m_Undo.Execute(std::format("SnapshotEdit -Label {} -Before {} -After {}", xeditor::Quote(Edit), xeditor::Quote(Before), xeditor::Quote(After))); !Err.empty()) return Err;
+            return "ok";
+        }
         session(xresource::full_guid Guid, xresource_editor::library::guid LibraryGuid, xgpu::device* pDevice) noexcept
             : descriptor_editor("RenderGraph", Guid, LibraryGuid, pDevice)
         {
@@ -22,7 +39,7 @@ namespace xrender_graph_editor
             AddPanel("Post chain", dock::left, [this] { m_DescriptorInspector.Show(); });
             AddPanel("Graph", dock::center, [this]      // (the chain as a graph: xgraph's layout and routes, the material stack's)
             {
-                if (m_Document.isLoaded()) canvas::Draw(m_Canvas, static_cast<const xrender_graph::descriptor&>(*m_Document.m_pDescriptor).ToDesc());
+                if (m_Document.isLoaded()) canvas::Draw(m_Canvas, static_cast<const xrender_graph::descriptor&>(*m_Document.m_pDescriptor).ToDesc(), [this](const std::string& E) { return GraphEdit(E); });
             });
         }
     };
