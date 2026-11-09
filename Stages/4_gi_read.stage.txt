@@ -5,10 +5,10 @@
   "gi_read"
 
 [ StagePasses : 2 ]
-{ Stage:d  Name:s               Kernel:s       Size:s       Push:s                                              RenderPass:s       Repeat:s             RepeatSlot:d }
-//-------  -------------------  -------------  -----------  --------------------------------------------------  -----------------  -------------------  ------------
-     0     "GI read: classify"  "gi_classify"  "view.size"  "gi.table_base,0,gi.divisor,gi.ao_mode"             "GI: screen pass"  ""                        -1     
-     0     "GI read: gather"    "gi_gather"    "view.size"  "gi.table_base,repeat.index,gi.divisor,gi.ao_mode"  "GI: screen pass"  "gi.gather_buffers"        1     
+{ Stage:d  Name:s               Kernel:s       Size:s       Push:s                                              RenderPass:s       Repeat:s             RepeatSlot:d  Items:s  UBOs:s }
+//-------  -------------------  -------------  -----------  --------------------------------------------------  -----------------  -------------------  ------------  -------  ------
+     0     "GI read: classify"  "gi_classify"  "view.size"  "gi.table_base,0,gi.divisor,gi.ao_mode"             "GI: screen pass"  ""                        -1         ""       ""  
+     0     "GI read: gather"    "gi_gather"    "view.size"  "gi.table_base,repeat.index,gi.divisor,gi.ao_mode"  "GI: screen pass"  "gi.gather_buffers"        1         ""       ""  
 
 [ StageBindings : 48 ]
 { Stage:d  Pass:d  Kind:s     Name:s                              Life:s      Usage:s    Write:c  Policy:s    If:s           }

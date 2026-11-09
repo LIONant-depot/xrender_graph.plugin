@@ -1,0 +1,38 @@
+
+[ Stages : 1 ]
+{ Name:s }
+//------
+  "tile"
+
+[ StagePasses : 1 ]
+{ Stage:d  Name:s                  Kernel:s  Size:s       Push:s                          RenderPass:s                                 Repeat:s  RepeatSlot:d  Items:s        UBOs:s                                        }
+//-------  ----------------------  --------  -----------  ------------------------------  -------------------------------------------  --------  ------------  -------------  ---------------------------------------------
+     0     "tile pass (lighting)"   "tile"   "view.size"  "frame.c2w,repeat.index,0,0,0"  "Render target: HDR colour (the tile pass)"     ""          -1       "tile.graphs"  "Geometry: view block,Lights: lighting block"
+
+[ StageBindings : 24 ]
+{ Stage:d  Pass:d  Kind:s     Name:s                                    Life:s      Usage:s    Write:c  Policy:s    If:s           }
+//-------  ------  ---------  ----------------------------------------  ----------  ---------  -------  ----------  --------------
+     0       0     "buffer"   "GI: dummy"                               "retained"  "storage"     0     "none"      "never"       
+     0       0     "buffer"   "Frame: instance data"                    "retained"  "storage"     0     "none"      ""            
+     0       0     "buffer"   "Lights: light ring"                      "retained"  "storage"     0     "none"      ""            
+     0       0     "buffer"   "Lights: cell ring"                       "retained"  "storage"     0     "none"      ""            
+     0       0     "buffer"   "GI: screen buffer*"                      "retained"  "storage"     0     "none"      ""            
+     0       0     "buffer"   "GI: light ring"                          "retained"  "storage"     0     "none"      ""            
+     0       0     "buffer"   "GI: moment ring"                         "retained"  "storage"     0     "none"      ""            
+     0       0     "buffer"   "Materials: material parameters"          "retained"  "storage"     0     "none"      ""            
+     0       0     "buffer"   "Materials: entity parameters"            "retained"  "storage"     0     "none"      ""            
+     0       0     "buffer"   "Render target: tail records"             "retained"  "storage"     0     "none"      ""            
+     0       0     "buffer"   "Tile pass: the light funnel's counters"  "retained"  "storage"     1     "partial"   "tile.funnel" 
+     0       0     "buffer"   "Lights: the screen tiles' lists"         "frame"     "storage"     0     "none"      "lights.tiles"
+     0       0     "texture"  "Render target: depth"                    "frame"     "sampled"     0     "none"      ""            
+     0       0     "texture"  "Render target: prepass normals"          "frame"     "sampled"     0     "none"      ""            
+     0       0     "texture"  "Render target: prepass ids"              "frame"     "sampled"     0     "none"      ""            
+     0       0     "texture"  "Render target: tile attributes"          "frame"     "sampled"     0     "none"      ""            
+     0       0     "texture"  "Probes: environment DFG"                 "frame"     "sampled"     0     "none"      ""            
+     0       0     "texture"  "Probes: environment atlas"               "frame"     "sampled"     0     "none"      ""            
+     0       0     "texture"  "Probes: probe atlas"                     "frame"     "sampled"     0     "none"      ""            
+     0       0     "texture"  "Render target: contact shadow"           "frame"     "sampled"     0     "none"      ""            
+     0       0     "texture"  "Render target: sun shadow mask"          "frame"     "sampled"     0     "none"      ""            
+     0       0     "texture"  "Shadows: shadow atlas"                   "frame"     "sampled"     0     "none"      ""            
+     0       0     "texture"  "Shadows: white dummy"                    "frame"     "sampled"     0     "none"      ""            
+     0       0     "image"    "Render target: HDR colour"               "frame"     "color"       1     "preserve"  ""            

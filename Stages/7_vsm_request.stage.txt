@@ -5,9 +5,9 @@
   "vsm_request"
 
 [ StagePasses : 1 ]
-{ Stage:d  Name:s                        Kernel:s       Size:s       Push:s                                                                                              RenderPass:s  Repeat:s  RepeatSlot:d }
-//-------  ----------------------------  -------------  -----------  --------------------------------------------------------------------------------------------------  ------------  --------  ------------
-     0     "Shadows: VSM requests made"  "vsm_request"  "view.size"  "shadow.slot,0,vsm.table_base,view.width,view.height,vsm.bit_uints,vsm.soft_levels,vsm.level_band"       ""          ""          -1     
+{ Stage:d  Name:s                        Kernel:s       Size:s       Push:s                                                                                              RenderPass:s  Repeat:s  RepeatSlot:d  Items:s  UBOs:s }
+//-------  ----------------------------  -------------  -----------  --------------------------------------------------------------------------------------------------  ------------  --------  ------------  -------  ------
+     0     "Shadows: VSM requests made"  "vsm_request"  "view.size"  "shadow.slot,0,vsm.table_base,view.width,view.height,vsm.bit_uints,vsm.soft_levels,vsm.level_band"       ""          ""          -1         ""       ""  
 
 [ StageBindings : 4 ]
 { Stage:d  Pass:d  Kind:s     Name:s                   Life:s   Usage:s    Write:c  Policy:s   If:s }

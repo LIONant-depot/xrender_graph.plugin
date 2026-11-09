@@ -5,9 +5,9 @@
   "refl_ssr"
 
 [ StagePasses : 1 ]
-{ Stage:d  Name:s                       Kernel:s    Size:s       Push:s                                                                                                 RenderPass:s  Repeat:s  RepeatSlot:d }
-//-------  ---------------------------  ----------  -----------  -----------------------------------------------------------------------------------------------------  ------------  --------  ------------
-     0     "reflections: screen trace"  "refl_ssr"  "refl.size"  "refl.slot,0,refl.ssr_frame,refl.ssr_steps,refl.ssr_max_dist,refl.ssr_thickness,refl.ssr_max_rough,0"       ""          ""          -1     
+{ Stage:d  Name:s                       Kernel:s    Size:s       Push:s                                                                                                 RenderPass:s  Repeat:s  RepeatSlot:d  Items:s  UBOs:s }
+//-------  ---------------------------  ----------  -----------  -----------------------------------------------------------------------------------------------------  ------------  --------  ------------  -------  ------
+     0     "reflections: screen trace"  "refl_ssr"  "refl.size"  "refl.slot,0,refl.ssr_frame,refl.ssr_steps,refl.ssr_max_dist,refl.ssr_thickness,refl.ssr_max_rough,0"       ""          ""          -1         ""       ""  
 
 [ StageBindings : 5 ]
 { Stage:d  Pass:d  Kind:s     Name:s                             Life:s     Usage:s    Write:c  Policy:s          If:s            }
