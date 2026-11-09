@@ -10,7 +10,7 @@
 // nothing: its consumers read what is there without it. Editing: a node's checkbox bypasses it, right click a node for remove, move,
 // insert after (only the types that keep the chain valid); every edit is one undoable descriptor edit (EditFn: post::Edit's text, its reply).
 // Right drag pans.
-#include "dependencies/xgraph/source/xgraph_routes.h"
+#include "dependencies/xgraph/source/xgraph_view.h"
 #include "plugins/xrender_graph.plugin/source/Module/xrender_graph_descriptor.h"
 #include "dependencies/imgui/imgui.h"
 #include <functional>
@@ -25,7 +25,7 @@ namespace xrender_graph_editor::canvas
 
     struct step { std::string m_Name; std::vector<std::string> m_In, m_Out; bool m_bOn = true; };
 
-    struct state { ImVec2 m_Pan{ 0, 0 }; int m_Menu = -1; std::string m_LastReply; };
+    struct state { xgraph::view::view m_View; int m_Menu = -1, m_Selected = -1; std::string m_LastReply; };
     using edit_fn = std::function<std::string(const std::string&)>;      // post::Edit's text ("bypass 1 0") -> "ok" or why not
 
     // The chain's steps (an "HDR" source first: the lit image the chain starts from) and its wires
@@ -69,48 +69,71 @@ namespace xrender_graph_editor::canvas
         }
         const auto R = gr::Build(In, Edges);
 
+        // The frame (xgraph::view, the material stack's): pan, zoom, grid, crisp wires lit for the node under the mouse or selected
         ImGui::BeginChild("##rgcanvas", ImVec2(0, 0), false, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
-        if (ImGui::IsWindowHovered() && ImGui::IsMouseDragging(ImGuiMouseButton_Right)) { S.m_Pan.x += ImGui::GetIO().MouseDelta.x; S.m_Pan.y += ImGui::GetIO().MouseDelta.y; }
+        static const xgraph::view::style Style{};
+        const bool bRightClick = S.m_View.Input(Style, ImGui::GetContentRegionAvail());
         auto* pDL = ImGui::GetWindowDrawList();
-        const ImVec2 O{ ImGui::GetCursorScreenPos().x + S.m_Pan.x, ImGui::GetCursorScreenPos().y + S.m_Pan.y };
-        const ImU32 kWire = IM_COL32(150, 180, 220, 255), kBox = IM_COL32(48, 52, 60, 255), kHead = IM_COL32(70, 90, 120, 255), kText = IM_COL32(230, 230, 230, 255), kDim = IM_COL32(140, 140, 140, 255);
-        for (const auto& W : R.m_Wires) pDL->AddLine(ImVec2(O.x + W.m_X0, O.y + W.m_Y0), ImVec2(O.x + W.m_X1, O.y + W.m_Y1), kWire, 2.0f);
-        for (const auto& J : R.m_Junctions) pDL->AddCircleFilled(ImVec2(O.x + J.m_X, O.y + J.m_Y), 3.5f, kWire);
+        auto& V = S.m_View;
+        V.DrawBackground(pDL, Style);
+        const ImVec2 Mouse = ImGui::GetIO().MousePos;
+        int Hover = -1;
+        for (std::size_t i = 1; i < Steps.size(); ++i)
+        {
+            const auto& B = R.m_Layout.m_Steps[i];
+            const ImVec2 a = V.ToScreen(B.m_X, B.m_Y), b = V.ToScreen(B.m_X + B.m_W, B.m_Y + B.m_H);
+            if (ImGui::IsWindowHovered() && Mouse.x >= a.x && Mouse.x < b.x && Mouse.y >= a.y && Mouse.y < b.y) Hover = static_cast<int>(i);
+        }
+        if (ImGui::IsWindowHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) S.m_Selected = Hover;      // (left click: select, empty: none)
+        if (bRightClick && Hover > 0) { S.m_Menu = Hover - 1; ImGui::OpenPopup("##node"); }
+        const ImU32 kWire = IM_COL32(150, 180, 220, 255), kBox = IM_COL32(48, 52, 60, 255), kHead = IM_COL32(70, 90, 120, 255), kSel = IM_COL32(230, 180, 90, 255), kText = IM_COL32(230, 230, 230, 255), kDim = IM_COL32(140, 140, 140, 255);
+        {
+            std::vector<float> Lit(Edges.size(), 0.0f);
+            for (const int Focus : { S.m_Selected, Hover })
+                if (Focus > 0) for (std::size_t e = 0; e < Edges.size(); ++e) if (Edges[e].m_From == Focus || Edges[e].m_To == Focus) Lit[e] = Focus == S.m_Selected ? 1.0f : std::max(Lit[e], 0.9f);
+            V.DrawRoutes(pDL, Style, R, std::vector<ImU32>(R.m_Sources.size(), kWire), Lit);
+        }
+        ImFont* pFont = ImGui::GetFont();
+        const float Font = ImGui::GetFontSize() * V.m_Zoom;
+        const auto Text = [&](ImVec2 At, ImU32 C, const std::string& Sv) { pDL->AddText(pFont, Font, At, C, Sv.c_str()); };
         for (std::size_t i = 0; i < Steps.size(); ++i)
         {
             const auto& St = Steps[i]; const auto& B = R.m_Layout.m_Steps[i];
-            const ImVec2 a{ O.x + B.m_X, O.y + B.m_Y }, b{ a.x + B.m_W, a.y + B.m_H };
-            const float Alpha = St.m_bOn ? 1.0f : 0.4f;
-            ImGui::PushStyleVar(ImGuiStyleVar_Alpha, Alpha);
-            pDL->AddRectFilled(a, b, ImGui::GetColorU32(kBox), 4.0f);
-            pDL->AddRectFilled(a, ImVec2(b.x, a.y + gl::geo::HEADER_H), ImGui::GetColorU32(St.m_bOn ? kHead : kBox), 4.0f, ImDrawFlags_RoundCornersTop);
-            pDL->AddText(ImVec2(a.x + 8, a.y + 5), ImGui::GetColorU32(kText), St.m_bOn ? St.m_Name.c_str() : (St.m_Name + " (bypassed)").c_str());
+            const ImVec2 a = V.ToScreen(B.m_X, B.m_Y), b = V.ToScreen(B.m_X + B.m_W, B.m_Y + B.m_H);
+            ImGui::PushStyleVar(ImGuiStyleVar_Alpha, St.m_bOn ? 1.0f : 0.4f);
+            pDL->AddRectFilled(a, b, ImGui::GetColorU32(kBox), V.Len(4.0f));
+            pDL->AddRectFilled(a, ImVec2(b.x, a.y + V.Len(gl::geo::HEADER_H)), ImGui::GetColorU32(St.m_bOn ? kHead : kBox), V.Len(4.0f), ImDrawFlags_RoundCornersTop);
+            if (static_cast<int>(i) == S.m_Selected) pDL->AddRect(a, b, kSel, V.Len(4.0f), 0, 2.0f);
+            Text(ImVec2(a.x + V.Len(8), a.y + V.Len(5)), ImGui::GetColorU32(kText), St.m_bOn ? St.m_Name : St.m_Name + " (bypassed)");
             for (std::size_t r = 0; r < St.m_In.size(); ++r)
             {
-                const float y = a.y + gl::RowY(static_cast<int>(r));
-                pDL->AddCircleFilled(ImVec2(a.x, y), 4.0f, ImGui::GetColorU32(kWire));
-                pDL->AddText(ImVec2(a.x + 8, y - 7), ImGui::GetColorU32(kDim), St.m_In[r].c_str());
+                const float y = a.y + V.Len(gl::RowY(static_cast<int>(r)));
+                pDL->AddCircleFilled(ImVec2(a.x, y), V.Len(4.0f), ImGui::GetColorU32(kWire));
+                Text(ImVec2(a.x + V.Len(8), y - Font * 0.5f), ImGui::GetColorU32(kDim), St.m_In[r]);
             }
             for (std::size_t r = 0; r < St.m_Out.size(); ++r)
             {
-                const float y = a.y + gl::RowY(static_cast<int>(r));
-                pDL->AddCircleFilled(ImVec2(b.x, y), 4.0f, ImGui::GetColorU32(kWire));
-                pDL->AddText(ImVec2(b.x - 8 - ImGui::CalcTextSize(St.m_Out[r].c_str()).x, y - 7), ImGui::GetColorU32(kText), St.m_Out[r].c_str());
+                const float y = a.y + V.Len(gl::RowY(static_cast<int>(r)));
+                pDL->AddCircleFilled(ImVec2(b.x, y), V.Len(4.0f), ImGui::GetColorU32(kWire));
+                Text(ImVec2(b.x - V.Len(8) - ImGui::CalcTextSize(St.m_Out[r].c_str()).x * V.m_Zoom, y - Font * 0.5f), ImGui::GetColorU32(kText), St.m_Out[r]);
             }
             ImGui::PopStyleVar();
             if (i == 0) continue;           // (the lit image: not a node)
             const int n = static_cast<int>(i) - 1;
             ImGui::PushID(n);
-            // the bypass checkbox in the header's right corner; the header and body: right click for the node's menu
-            ImGui::SetCursorScreenPos(ImVec2(b.x - 22, a.y + 4));
+            ImGui::SetCursorScreenPos(ImVec2(b.x - 22, a.y + (V.Len(gl::geo::HEADER_H) - ImGui::GetFrameHeight()) * 0.5f));      // the bypass checkbox in the header's right corner
             bool bOn = St.m_bOn;
             if (ImGui::Checkbox("##on", &bOn)) Send(std::format("bypass {} {}", n, bOn ? 1 : 0));
             if (ImGui::IsItemHovered()) ImGui::SetTooltip(bOn ? "On: uncheck to bypass it (kept in the chain, left out of the frame)" : "Bypassed: check to put it back");
-            ImGui::SetCursorScreenPos(a);
-            ImGui::InvisibleButton("##body", ImVec2(std::max(1.0f, B.m_W - 26), B.m_H), ImGuiButtonFlags_MouseButtonRight);
-            if (ImGui::IsItemClicked(ImGuiMouseButton_Right)) { S.m_Menu = n; ImGui::OpenPopup("##node"); }
-            if (ImGui::BeginPopup("##node"))
+            ImGui::PopID();
+        }
+        // The node's menu (a right click on it, not a drag)
+        if (ImGui::BeginPopup("##node"))
+        {
+            const int n = S.m_Menu;
+            if (n >= 0 && n < static_cast<int>(D.m_Nodes.size()))
             {
+                const auto& St = Steps[static_cast<std::size_t>(n) + 1];
                 ImGui::TextDisabled("%s", St.m_Name.c_str());
                 if (ImGui::MenuItem(St.m_bOn ? "Bypass" : "Turn on")) Send(std::format("bypass {} {}", n, St.m_bOn ? 0 : 1));
                 if (ImGui::MenuItem("Remove")) Send(std::format("remove {}", n));
@@ -123,13 +146,12 @@ namespace xrender_graph_editor::canvas
                     ImGui::EndMenu();
                 }
                 if (Types.empty() && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) ImGui::SetTooltip("Nothing fits after it (each node once; TAA first, the tone map last)");
-                ImGui::EndPopup();
             }
-            ImGui::PopID();
+            ImGui::EndPopup();
         }
         ImGui::SetCursorScreenPos(ImVec2(ImGui::GetWindowPos().x + 8, ImGui::GetWindowPos().y + ImGui::GetWindowHeight() - 24));
         if (!S.m_LastReply.empty()) ImGui::TextColored(S.m_LastReply.ends_with(": ok") ? ImVec4(0.6f, 0.6f, 0.6f, 1) : ImVec4(1.0f, 0.62f, 0.25f, 1), "%s", S.m_LastReply.c_str());
-        else ImGui::TextDisabled("Right click a node: bypass, remove, move, insert after. Its checkbox bypasses it. Right drag pans.");
+        else ImGui::TextDisabled("Click a node to light its wires; right click it: bypass, remove, move, insert after. Right drag pans, the wheel zooms, Home resets.");
         ImGui::EndChild();
     }
 }
