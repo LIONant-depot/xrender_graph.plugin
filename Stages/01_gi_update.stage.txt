@@ -1,0 +1,16 @@
+
+[ Stages : 1 ]
+{ Name:s      }
+//-----------
+  "gi_update"
+
+[ StagePasses : 1 ]
+{ Stage:d  Name:s       Kernel:s  Size:s       Push:s  RenderPass:s  Repeat:s  RepeatSlot:d  Items:s  UBOs:s  Recorder:s  }
+//-------  -----------  --------  -----------  ------  ------------  --------  ------------  -------  ------  -----------
+     0     "GI update"     ""     "view.size"    ""         ""          ""          -1         ""       ""    "gi.update"
+
+[ StageBindings : 2 ]
+{ Stage:d  Pass:d  Kind:s    Name:s                   Life:s      Usage:s    Write:c  Policy:s   If:s }
+//-------  ------  --------  -----------------------  ----------  ---------  -------  ---------  ----
+     0       0     "buffer"  "GI: host-visible data"  "frame"     "storage"     0     "none"      "" 
+     0       0     "buffer"  "GI: *"                  "retained"  "storage"     1     "partial"   "" 
