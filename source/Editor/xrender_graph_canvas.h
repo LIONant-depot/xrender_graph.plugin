@@ -18,6 +18,7 @@
 #include "dependencies/imgui/imgui.h"
 #include <functional>
 #include <map>
+#include <memory>
 #include <set>
 #include <tuple>
 #include <string>
@@ -32,7 +33,8 @@ namespace xrender_graph_editor::canvas
     struct step { std::string m_Name; std::vector<std::string> m_In, m_Out; bool m_bOn = true; bool m_bStage = false; std::string m_Tip, m_Stage; };     // (m_bStage: a frame stage's pass or its source; m_Stage: its stage's name - a checkbox when it can be bypassed)
 
     struct custom_type { std::uint64_t m_Id = 0; std::string m_Name, m_Description; };      // a system node type with a shader (the plugin's NodeTypes)
-    struct state { xgraph::view::view m_View; int m_Menu = -1, m_Selected = -1; std::string m_LastReply; std::vector<custom_type> m_CustomTypes; std::vector<std::string> m_CustomNames; xlionrender::stage::library m_Stages; std::vector<std::string> m_StagesOff; };
+    struct state { xgraph::view::view m_View; int m_Menu = -1, m_Selected = -1; std::string m_LastReply; std::vector<custom_type> m_CustomTypes; std::vector<std::string> m_CustomNames; xlionrender::stage::library m_Stages; std::vector<std::string> m_StagesOff;
+                   std::string m_CacheKey; std::vector<step> m_CacheSteps; std::vector<gl::edge> m_CacheEdges; std::shared_ptr<gr::result> m_pCacheRoutes; };      // (the layout made when what it shows changes)
     using edit_fn = std::function<std::string(const std::string&)>;      // post::Edit's text ("bypass 1 0") -> "ok" or why not
 
     // The chain's steps with their real contracts (stage I, step 2): a node's pins are what its passes read and write (post::Lower's
@@ -145,19 +147,33 @@ namespace xrender_graph_editor::canvas
     inline void Draw(state& S, const post::desc& D, const edit_fn& EditFn) noexcept
     {
         const auto Send = [&](const std::string& Edit) { S.m_LastReply = Edit + ": " + EditFn(Edit); };
-        std::vector<step> Steps; std::vector<gl::edge> Edges;
-        Build(D, Steps, Edges, S.m_CustomNames, S.m_Stages, S.m_StagesOff);
-        const int nPost = static_cast<int>(D.m_Nodes.size());      // (steps 2 .. 2 + nPost - 1: the chain's nodes, edited here)
-        gl::input In(1);
-        for (const auto& St : Steps)
+        // The steps, their layout and routes: made again only when what they show changes (every frame they cost the editor most of its
+        // frame rate once the stages were in: 205 to 25 fps, 2026-11-10)
+        std::string Key;
+        for (const auto& N : D.m_Nodes) Key += std::format("{}{}{},", static_cast<int>(N.m_Type), N.m_bOn ? 1 : 0, N.m_Custom);
+        for (const auto& n : S.m_CustomNames) Key += n + ";";
+        for (const auto& s : S.m_StagesOff) Key += s + "|";
+        Key += std::format("#{}#{}", S.m_Stages.size(), ImGui::GetFontSize());
+        if (Key != S.m_CacheKey || !S.m_pCacheRoutes)
         {
-            float W = ImGui::CalcTextSize((St.m_bOn ? St.m_Name : St.m_Name + " (bypassed)").c_str()).x + 16 + 26;     // (+ the bypass checkbox)
-            const std::size_t nRows = std::max(St.m_In.size(), St.m_Out.size());
-            for (std::size_t r = 0; r < nRows; ++r)
-                W = std::max(W, (r < St.m_In.size() ? ImGui::CalcTextSize(St.m_In[r].c_str()).x : 0.0f) + (r < St.m_Out.size() ? ImGui::CalcTextSize(St.m_Out[r].c_str()).x : 0.0f) + gl::geo::MID_GAP);
-            In[0].m_Steps.push_back({ static_cast<std::uint64_t>(In[0].m_Steps.size() + 1), gl::StepW(W), static_cast<int>(std::max<std::size_t>(nRows, 1)) });
+            S.m_CacheSteps.clear(); S.m_CacheEdges.clear();
+            Build(D, S.m_CacheSteps, S.m_CacheEdges, S.m_CustomNames, S.m_Stages, S.m_StagesOff);
+            gl::input In(1);
+            for (const auto& St : S.m_CacheSteps)
+            {
+                float W = ImGui::CalcTextSize((St.m_bOn ? St.m_Name : St.m_Name + " (bypassed)").c_str()).x + 16 + 26;     // (+ the bypass checkbox)
+                const std::size_t nRows = std::max(St.m_In.size(), St.m_Out.size());
+                for (std::size_t r = 0; r < nRows; ++r)
+                    W = std::max(W, (r < St.m_In.size() ? ImGui::CalcTextSize(St.m_In[r].c_str()).x : 0.0f) + (r < St.m_Out.size() ? ImGui::CalcTextSize(St.m_Out[r].c_str()).x : 0.0f) + gl::geo::MID_GAP);
+                In[0].m_Steps.push_back({ static_cast<std::uint64_t>(In[0].m_Steps.size() + 1), gl::StepW(W), static_cast<int>(std::max<std::size_t>(nRows, 1)) });
+            }
+            S.m_pCacheRoutes = std::make_shared<gr::result>(gr::Build(In, S.m_CacheEdges));
+            S.m_CacheKey = Key;
         }
-        const auto R = gr::Build(In, Edges);
+        const auto& Steps = S.m_CacheSteps;
+        const auto& Edges = S.m_CacheEdges;
+        const auto& R     = *S.m_pCacheRoutes;
+        const int nPost = static_cast<int>(D.m_Nodes.size());      // (steps 2 .. 2 + nPost - 1: the chain's nodes, edited here)
 
         // The frame (xgraph::view, the material stack's): pan, zoom, grid, crisp wires lit for the node under the mouse or selected
         ImGui::BeginChild("##rgcanvas", ImVec2(0, 0), false, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
