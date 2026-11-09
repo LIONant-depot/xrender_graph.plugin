@@ -117,7 +117,7 @@ namespace xrender_graph_editor::canvas
             for (const auto& Pa : Sd.m_Passes)
             {
                 const bool bOn = std::find(StagesOff.begin(), StagesOff.end(), Stage) == StagesOff.end();
-                step St{ Pa.m_Name, {}, {}, bOn, true, std::format("stage {}, kernel {}, {} push words, {}{}", Stage, Pa.m_Kernel, Pa.m_Push.size(), Pa.m_RenderPass.empty() ? "dispatched over " + Pa.m_Size : "drawn in " + Pa.m_RenderPass
+                step St{ Pa.m_Name, {}, {}, bOn, true, std::format("stage {}, {}{}", Stage, !Pa.m_Recorder.empty() ? "recorded by the code (" + Pa.m_Recorder + ") in " + Pa.m_RenderPass : std::format("kernel {}, {} push words, ", Pa.m_Kernel, Pa.m_Push.size()) + (Pa.m_RenderPass.empty() ? "dispatched over " + Pa.m_Size : "drawn in " + Pa.m_RenderPass)
                        , [&] { for (const auto& B : xlionrender::stage::bypassable_v) if (B.m_Stage == Stage) return std::string("\nits checkbox bypasses it: ") + std::string(B.m_Without); return std::string("\n(not bypassable: the frame has no way without it)"); }()), Stage };
                 for (const auto* pList : { &Pa.m_Buffers, &Pa.m_Textures, &Pa.m_Images })
                     for (const auto& B : *pList)

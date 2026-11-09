@@ -5,9 +5,9 @@
   "tile"
 
 [ StagePasses : 1 ]
-{ Stage:d  Name:s                  Kernel:s  Size:s       Push:s                          RenderPass:s                                 Repeat:s  RepeatSlot:d  Items:s        UBOs:s                                        }
-//-------  ----------------------  --------  -----------  ------------------------------  -------------------------------------------  --------  ------------  -------------  ---------------------------------------------
-     0     "tile pass (lighting)"   "tile"   "view.size"  "frame.c2w,repeat.index,0,0,0"  "Render target: HDR colour (the tile pass)"     ""          -1       "tile.graphs"  "Geometry: view block,Lights: lighting block"
+{ Stage:d  Name:s                  Kernel:s  Size:s       Push:s                          RenderPass:s                                 Repeat:s  RepeatSlot:d  Items:s        UBOs:s                                         Recorder:s }
+//-------  ----------------------  --------  -----------  ------------------------------  -------------------------------------------  --------  ------------  -------------  ---------------------------------------------  ----------
+     0     "tile pass (lighting)"   "tile"   "view.size"  "frame.c2w,repeat.index,0,0,0"  "Render target: HDR colour (the tile pass)"     ""          -1       "tile.graphs"  "Geometry: view block,Lights: lighting block"      ""    
 
 [ StageBindings : 24 ]
 { Stage:d  Pass:d  Kind:s     Name:s                                    Life:s      Usage:s    Write:c  Policy:s    If:s           }

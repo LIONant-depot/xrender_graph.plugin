@@ -5,10 +5,10 @@
    "ao" 
 
 [ StagePasses : 2 ]
-{ Stage:d  Name:s           Kernel:s  Size:s            Push:s                                                                                                                             RenderPass:s  Repeat:s  RepeatSlot:d  Items:s  UBOs:s }
-//-------  ---------------  --------  ----------------  ---------------------------------------------------------------------------------------------------------------------------------  ------------  --------  ------------  -------  ------
-     0     "AO (raw)"         "ao"    "gi.screen_size"  "gi.screen_width,gi.screen_height,gi.divisor,ao.mode_raw,ao.radius,ao.thickness,ao.pixels_per_unit,gi.table_base,0,1051260355"          ""          ""          -1         ""       ""  
-     0     "AO (filtered)"    "ao"    "gi.screen_size"  "gi.screen_width,gi.screen_height,gi.divisor,ao.mode_filter,ao.radius,ao.thickness,ao.pixels_per_unit,gi.table_base,0,1051260355"       ""          ""          -1         ""       ""  
+{ Stage:d  Name:s           Kernel:s  Size:s            Push:s                                                                                                                             RenderPass:s  Repeat:s  RepeatSlot:d  Items:s  UBOs:s  Recorder:s }
+//-------  ---------------  --------  ----------------  ---------------------------------------------------------------------------------------------------------------------------------  ------------  --------  ------------  -------  ------  ----------
+     0     "AO (raw)"         "ao"    "gi.screen_size"  "gi.screen_width,gi.screen_height,gi.divisor,ao.mode_raw,ao.radius,ao.thickness,ao.pixels_per_unit,gi.table_base,0,1051260355"          ""          ""          -1         ""       ""        ""    
+     0     "AO (filtered)"    "ao"    "gi.screen_size"  "gi.screen_width,gi.screen_height,gi.divisor,ao.mode_filter,ao.radius,ao.thickness,ao.pixels_per_unit,gi.table_base,0,1051260355"       ""          ""          -1         ""       ""        ""    
 
 [ StageBindings : 18 ]
 { Stage:d  Pass:d  Kind:s     Name:s                                Life:s     Usage:s    Write:c  Policy:s          If:s      }

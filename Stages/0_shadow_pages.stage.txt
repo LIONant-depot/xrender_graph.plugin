@@ -1,0 +1,23 @@
+
+[ Stages : 1 ]
+{ Name:s         }
+//--------------
+  "shadow_pages"
+
+[ StagePasses : 2 ]
+{ Stage:d  Name:s                        Kernel:s  Size:s       Push:s  RenderPass:s             Repeat:s  RepeatSlot:d  Items:s  UBOs:s  Recorder:s            }
+//-------  ----------------------------  --------  -----------  ------  -----------------------  --------  ------------  -------  ------  ---------------------
+     0     "shadow pages: sun"              ""     "view.size"    ""    "Shadows: shadow atlas"     ""          -1         ""       ""    "shadows.sun_pages"  
+     0     "shadow pages: local lights"     ""     "view.size"    ""    "Shadows: shadow atlas"     ""          -1         ""       ""    "shadows.local_pages"
+
+[ StageBindings : 8 ]
+{ Stage:d  Pass:d  Kind:s    Name:s                   Life:s      Usage:s    Write:c  Policy:s   If:s }
+//-------  ------  --------  -----------------------  ----------  ---------  -------  ---------  ----
+     0       0     "buffer"  "Frame: instance data"   "retained"  "storage"     0     "none"      "" 
+     0       0     "buffer"  "Geometry: *"            "retained"  "storage"     0     "none"      "" 
+     0       0     "buffer"  "Shadows: *"             "retained"  "storage"     0     "none"      "" 
+     0       0     "image"   "Shadows: shadow atlas"  "retained"  "depth"       1     "partial"   "" 
+     0       1     "buffer"  "Frame: instance data"   "retained"  "storage"     0     "none"      "" 
+     0       1     "buffer"  "Geometry: *"            "retained"  "storage"     0     "none"      "" 
+     0       1     "buffer"  "Shadows: *"             "retained"  "storage"     0     "none"      "" 
+     0       1     "image"   "Shadows: shadow atlas"  "retained"  "depth"       1     "partial"   "" 
