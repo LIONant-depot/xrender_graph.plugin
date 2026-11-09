@@ -7,17 +7,23 @@
 // says why in its log. (The Level Editor's Render Graph drawer tab shows what a chain expands to - the passes, sizes, what ran.)
 #include "source/Tools/Editor/xeditor_descriptor_editor.h"
 #include "plugins/xrender_graph.plugin/source/Module/xrender_graph_descriptor.h"
+#include "plugins/xrender_graph.plugin/source/Editor/xrender_graph_canvas.h"
 
 namespace xrender_graph_editor
 {
     struct session : xeditor::descriptor_editor
     {
+        canvas::state m_Canvas;
         session(xresource::full_guid Guid, xresource_editor::library::guid LibraryGuid, xgpu::device* pDevice) noexcept
             : descriptor_editor("RenderGraph", Guid, LibraryGuid, pDevice)
         {
             m_Document.Load();
             BindDescriptorInspector();
             AddPanel("Post chain", dock::left, [this] { m_DescriptorInspector.Show(); });
+            AddPanel("Graph", dock::center, [this]      // (the chain as a graph: xgraph's layout and routes, the material stack's)
+            {
+                if (m_Document.isLoaded()) canvas::Draw(m_Canvas, static_cast<const xrender_graph::descriptor&>(*m_Document.m_pDescriptor).ToDesc());
+            });
         }
     };
 
