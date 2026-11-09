@@ -12,7 +12,7 @@
 
 namespace xrender_graph
 {
-    inline constexpr int bundle_version_v = 1;      // the root's format
+    inline constexpr int bundle_version_v = 2;      // the root's format (2: the PostGraph table's Custom column)
     inline constexpr int node_abi_v       = 1;      // the node contract the root was compiled against (the built-in post nodes)
 
     struct bundle
