@@ -16,7 +16,7 @@
 
 namespace xrender_graph
 {
-    inline constexpr auto type_guid_v = xresource::type_guid(0x1BDCDE0D1FF7D371ull);     // "RenderGraph": must match the TypeGUID of the plugin's resource_pipeline.config.txt
+    inline constexpr auto type_guid_v = xresource::type_guid(xresource::guid_generator::Instance64FromString("RenderGraph"));     // #EFCA44B9E5893F8D: the plugin config's TypeGUID (derived from the name, as every plugin)
     using render_graph_ref = xresource::def_guid<type_guid_v>;
 
     namespace post = xlionrender::post;

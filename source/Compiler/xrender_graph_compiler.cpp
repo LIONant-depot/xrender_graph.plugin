@@ -4,7 +4,7 @@
 // naming the node or parameter (the renderer would otherwise tone map only).
 #include "dependencies/xstrtool/source/xstrtool.h"
 #include "plugins/xrender_graph.plugin/source/Module/xrender_graph_descriptor.h"
-#include "dependencies/xLIONRender/src/xlionrender_post_graph_text.h"
+#include "plugins/xrender_graph.plugin/source/xrender_graph_bundle.h"
 #include "source/Compiler/xrender_graph_compiler.h"
 
 #include "dependencies/xproperty/source/xcore/my_properties.cpp"
@@ -33,14 +33,15 @@ namespace xrender_graph_compiler
             }
 
             displayProgressBar("Writing the compiled chain", 0.7f);
-            auto D = Descriptor.ToDesc();
+            xrender_graph::bundle B;            // (the root; no links: the post nodes are built into the engine)
+            B.m_Desc = Descriptor.ToDesc();
             for (auto& T : m_Target)
             {
                 if (!T.m_bValid) continue;
                 xtextfile::stream S;
                 std::string Problem;
                 if (auto Err = S.Open(false, std::wstring(T.m_DataPath), xtextfile::file_type::TEXT); Err) return Err;
-                if (auto Err = xlionrender::post::Serialize(S, D, Problem); Err) return Err;
+                if (auto Err = B.Serialize(S, Problem); Err) return Err;
             }
             displayProgressBar("Writing the compiled chain", 1.0f);
             return {};

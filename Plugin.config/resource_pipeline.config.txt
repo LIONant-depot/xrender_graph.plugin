@@ -9,7 +9,7 @@
   "PipelinePlugin/Group"                     ;string "Graphics"
   "PipelinePlugin/Description"               ;string "How a Level's frame is finished: the post chain (TAA, bloom, exposure, tone map), its order, bypasses and parameters."
   "PipelinePlugin/FileExtension"             ;wstring ""
-  "PipelinePlugin/TypeGUID/Value"            ;u64    #1BDCDE0D1FF7D371
+  "PipelinePlugin/TypeGUID/Value"            ;u64    #EFCA44B9E5893F8D
   "PipelinePlugin/IconPaths[]"                      ;s64    1
   "PipelinePlugin/IconPaths[G:0]"                      ;wstring "icon.png"
   "PipelinePlugin/Details/CompilationScript" ;wstring "Cache\\Plugins\\xrender_graph.plugin\\Build\\CreateAndBuildProject.bat"
