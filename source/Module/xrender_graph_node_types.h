@@ -15,15 +15,20 @@
 
 namespace xrender_graph::node_types
 {
+    struct param { std::string m_Name, m_Description; float m_Default = 0, m_Min = 0, m_Max = 0; };      // the shader's Push.m_A .. m_E, in order (at most 5)
     struct type
     {
         std::uint64_t           m_Id = 0;
         std::string             m_Name, m_Category, m_Code, m_Description;
+        std::vector<param>      m_Params;
         std::filesystem::path   m_File;         // the .rgn.txt
         xerr Serialize(xtextfile::stream& F) noexcept
         {
-            return F.Record("RenderNodeType", [&](xerr& E)
-                { false || (E = F.Field("Id", m_Id)) || (E = F.Field("Name", m_Name)) || (E = F.Field("Category", m_Category)) || (E = F.Field("Code", m_Code)) || (E = F.Field("Description", m_Description)); });
+            if (auto Err = F.Record("RenderNodeType", [&](xerr& E)
+                { false || (E = F.Field("Id", m_Id)) || (E = F.Field("Name", m_Name)) || (E = F.Field("Category", m_Category)) || (E = F.Field("Code", m_Code)) || (E = F.Field("Description", m_Description)); }); Err) return Err;
+            return F.Record("Params"
+                , [&](std::size_t& Count, xerr&) { if (F.isReading()) m_Params.resize(Count); else Count = m_Params.size(); }
+                , [&](std::size_t i, xerr& E) { auto& P = m_Params[i]; false || (E = F.Field("Name", P.m_Name)) || (E = F.Field("Default", P.m_Default)) || (E = F.Field("Min", P.m_Min)) || (E = F.Field("Max", P.m_Max)) || (E = F.Field("Description", P.m_Description)); });
         }
     };
 

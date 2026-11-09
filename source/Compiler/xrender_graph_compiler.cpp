@@ -71,6 +71,17 @@ namespace xrender_graph_compiler
                         LogMessage(xresource_pipeline::msg_type::ERROR, std::format("node {} ({}): {}", n, It->m_Name, R.GetErrorMessage()));
                         return xerr::create_f<state, "RenderGraph: a node shader does not compile (see the log)">();
                     }
+                    // its parameters: "<Type>.<Param>" in the chain's table (the descriptor's own row of that name wins: the person's value), pushed as A .. E
+                    if (It->m_Params.size() > 5) { LogMessage(xresource_pipeline::msg_type::ERROR, std::format("node {} ({}): at most 5 parameters", n, It->m_Name)); return xerr::create_f<state, "RenderGraph: a node type has too many parameters">(); }
+                    int Custom = 0; for (std::size_t m = 0; m < n; ++m) Custom += Descriptor.m_Nodes[m].m_Type == xlionrender::post::node_type::CUSTOM;
+                    auto It2 = std::find_if(B.m_Desc.m_Nodes.begin(), B.m_Desc.m_Nodes.end(), [&](const auto& Nd) { return Nd.m_Type == xlionrender::post::node_type::CUSTOM && Nd.m_Custom == Custom; });
+                    for (const auto& Pp : It->m_Params)
+                    {
+                        const std::string Name = It->m_Name + "." + Pp.m_Name;
+                        if (std::none_of(B.m_Desc.m_Params.begin(), B.m_Desc.m_Params.end(), [&](const auto& Q) { return Q.m_Name == Name; }))
+                            B.m_Desc.m_Params.push_back({ Name, "", xlionrender::post::param_type::FLOAT, Pp.m_Default, Pp.m_Min, Pp.m_Max });
+                        if (It2 != B.m_Desc.m_Nodes.end()) It2->m_Params.push_back(Name);
+                    }
                     std::vector<std::int32_t> Words(R.cbegin(), R.cend());
                     const std::uint64_t Hash = std::hash<std::string_view>{}(std::string_view(reinterpret_cast<const char*>(Words.data()), Words.size() * 4));
                     B.m_Links.push_back({ "shader", It->m_Id, Hash });

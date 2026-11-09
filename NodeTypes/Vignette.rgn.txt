@@ -6,3 +6,8 @@
 //----  ------  ----------  ------  -------------
   #D75B7E72421A7BAF  "Vignette"  "Image"  "Vignette.glsl"  "Darkens the image toward its corners, as a lens does."
 
+[ Params : 1 ]
+{ Name:s      Default:f  Min:f  Max:f  Description:s }
+//----------  ---------  -----  -----  -------------
+  "Strength"  0.35       0      1      "How much the corners darken (0: none)"
+

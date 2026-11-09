@@ -4,3 +4,7 @@
 //----  ------  ----------  ------  -------------
   #6A1C0F4E2B9D3E71  "Identity"  "Utility"  "Identity.glsl"  "Passes the image through unchanged."
 
+[ Params : 0 ]
+{ Name:s  Default:f  Min:f  Max:f  Description:s }
+//------  ---------  -----  -----  -------------
+

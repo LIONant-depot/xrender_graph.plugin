@@ -14,6 +14,8 @@
 #include "plugins/xrender_graph.plugin/source/Module/xrender_graph_descriptor.h"
 #include "dependencies/imgui/imgui.h"
 #include <functional>
+#include <map>
+#include <tuple>
 #include <string>
 #include <vector>
 
@@ -29,32 +31,73 @@ namespace xrender_graph_editor::canvas
     struct state { xgraph::view::view m_View; int m_Menu = -1, m_Selected = -1; std::string m_LastReply; std::vector<custom_type> m_CustomTypes; std::vector<std::string> m_CustomNames; };
     using edit_fn = std::function<std::string(const std::string&)>;      // post::Edit's text ("bypass 1 0") -> "ok" or why not
 
-    // The chain's steps (an "HDR" source first: the lit image the chain starts from) and its wires
+    // The chain's steps with their real contracts (stage I, step 2): a node's pins are what its passes read and write (post::Lower's
+    // declarations, the node's levels and internal images folded: "Bloom" for its levels), its wires from the node that last made that
+    // image before it. Two sources: the Scene (the lit image and depth it hands the chain) and Last frame (what a node reads before
+    // this frame made it: TAA's history, the bloom's threshold reading last frame's exposure). A bypassed node keeps its pins (faded),
+    // makes nothing.
+    inline std::string ImageName(const post::image_ref& r) noexcept
+    {
+        switch (r.m_Image)
+        {
+            case post::image::HDR:      return "Lit image";
+            case post::image::DEPTH:    return "Depth";
+            case post::image::TAA_PREV: return "History";
+            case post::image::EXPOSURE: return "Exposure";
+            case post::image::BLOOM:    return "Bloom";
+            case post::image::OUTPUT:   return "Output";
+            default:                    return "Image";        // (CHAIN, TAA_CUR, CUSTOM: the chain image)
+        }
+    }
     inline void Build(const post::desc& D, std::vector<step>& Steps, std::vector<gl::edge>& Edges, const std::vector<std::string>& CustomNames = {}) noexcept
     {
         Steps.clear(); Edges.clear();
-        Steps.push_back({ "Lit image", {}, { "HDR" }, true });
-        int Image = 0, ImageRow = 0, Bloom = -1, Expo = -1;          // the producer (step) of each, and its output row
+        Steps.push_back({ "Scene", {}, { "Lit image", "Depth" }, true });
+        Steps.push_back({ "Last frame", {}, {}, true });
+        auto All = D; for (auto& N : All.m_Nodes) N.m_bOn = true;          // (the contracts: every node as if on)
+        const auto P = post::Lower(All, 1920, 1080);
+        std::map<std::string, std::pair<int, int>> Last;                     // image name -> (step, output row) that made it last
+        Last["Lit image"] = { 0, 0 }; Last["Depth"] = { 0, 1 };
         const auto Wire = [&](int From, int FromRow, int To, int ToRow) { Edges.push_back({ From, FromRow, To, ToRow, (std::uint64_t(From) << 8) | std::uint64_t(FromRow), Edges.size() }); };
-        for (const auto& N : D.m_Nodes)
+        std::vector<std::tuple<int, int, std::string>> FromLastFrame;        // (step, input row, image)
+        for (int n = 0; n < static_cast<int>(D.m_Nodes.size()); ++n)
         {
-            const int s = static_cast<int>(Steps.size());
-            switch (N.m_Type)
+            const auto& N = D.m_Nodes[std::size_t(n)];
+            step S;
+            S.m_bOn = N.m_bOn;
+            S.m_Name = N.m_Type == post::node_type::TAA ? "TAA" : N.m_Type == post::node_type::BLOOM ? "Bloom" : N.m_Type == post::node_type::EXPOSURE ? "Exposure"
+                     : N.m_Type == post::node_type::TONE_MAP ? "Tone map"
+                     : (N.m_Custom >= 0 && N.m_Custom < static_cast<int>(CustomNames.size()) && !CustomNames[std::size_t(N.m_Custom)].empty() ? CustomNames[std::size_t(N.m_Custom)] : std::string("Custom"));
+            std::vector<std::string> Made;                                  // (what this node's own passes wrote already: an internal read)
+            for (const auto& Pa : P.m_Passes)
             {
-                case post::node_type::TAA:      Steps.push_back({ "TAA",      { "HDR" },   { "Image" },    N.m_bOn }); if (N.m_bOn) { Wire(Image, ImageRow, s, 0); Image = s; ImageRow = 0; } break;
-                case post::node_type::BLOOM:    Steps.push_back({ "Bloom",    { "Image" }, { "Bloom" },    N.m_bOn }); if (N.m_bOn) { Wire(Image, ImageRow, s, 0); Bloom = s; } break;
-                case post::node_type::EXPOSURE: Steps.push_back({ "Exposure", { "Image" }, { "Exposure" }, N.m_bOn }); if (N.m_bOn) { Wire(Image, ImageRow, s, 0); Expo = s; } break;
-                case post::node_type::CUSTOM:   // (a shader node: the chain image in, the next chain image out)
-                    Steps.push_back({ N.m_Custom >= 0 && N.m_Custom < static_cast<int>(CustomNames.size()) && !CustomNames[std::size_t(N.m_Custom)].empty() ? CustomNames[std::size_t(N.m_Custom)] : "Custom", { "Image" }, { "Image" }, N.m_bOn });
-                    if (N.m_bOn) { Wire(Image, ImageRow, s, 0); Image = s; ImageRow = 0; }
-                    break;
-                case post::node_type::TONE_MAP:
-                    Steps.push_back({ "Tone map", { "Image", "Bloom", "Exposure" }, { "Output" }, N.m_bOn });
-                    Wire(Image, ImageRow, s, 0);
-                    if (Bloom >= 0) Wire(Bloom, 0, s, 1);
-                    if (Expo >= 0)  Wire(Expo, 0, s, 2);
-                    break;
+                if (Pa.m_Node != n) continue;
+                for (const auto& A : Pa.m_Accesses)
+                {
+                    const auto Name = ImageName(A.m_Ref);
+                    if (A.m_bWrite) { if (std::find(Made.begin(), Made.end(), Name) == Made.end()) Made.push_back(Name); continue; }
+                    if (A.m_Ref.m_Image == post::image::HDR && Pa.m_Kernel == post::kernel::POST && Pa.m_Push == post::push::EXPOSURE) continue;     // (bound, unused: the exposure kernel's second slot)
+                    if (std::find(Made.begin(), Made.end(), Name) != Made.end() || std::find(S.m_In.begin(), S.m_In.end(), Name) != S.m_In.end()) continue;
+                    S.m_In.push_back(Name);
+                }
             }
+            S.m_Out = Made;
+            const int s = static_cast<int>(Steps.size());
+            Steps.push_back(S);
+            for (int r = 0; r < static_cast<int>(S.m_In.size()); ++r)
+            {
+                if (const auto It = Last.find(S.m_In[std::size_t(r)]); It != Last.end()) { if (N.m_bOn) Wire(It->second.first, It->second.second, s, r); }
+                else FromLastFrame.emplace_back(s, r, S.m_In[std::size_t(r)]);
+            }
+            if (N.m_bOn) for (int r = 0; r < static_cast<int>(S.m_Out.size()); ++r) Last[S.m_Out[std::size_t(r)]] = { s, r };
+        }
+        // Last frame's outputs: one a distinct image read before this frame made it
+        for (const auto& [s, r, Name] : FromLastFrame)
+        {
+            auto& LF = Steps[1].m_Out;
+            int Row = static_cast<int>(std::find(LF.begin(), LF.end(), Name) - LF.begin());
+            if (Row == static_cast<int>(LF.size())) LF.push_back(Name);
+            if (Steps[std::size_t(s)].m_bOn) Wire(1, Row, s, r);
         }
     }
 
@@ -83,19 +126,19 @@ namespace xrender_graph_editor::canvas
         V.DrawBackground(pDL, Style);
         const ImVec2 Mouse = ImGui::GetIO().MousePos;
         int Hover = -1;
-        for (std::size_t i = 1; i < Steps.size(); ++i)
+        for (std::size_t i = 2; i < Steps.size(); ++i)
         {
             const auto& B = R.m_Layout.m_Steps[i];
             const ImVec2 a = V.ToScreen(B.m_X, B.m_Y), b = V.ToScreen(B.m_X + B.m_W, B.m_Y + B.m_H);
             if (ImGui::IsWindowHovered() && Mouse.x >= a.x && Mouse.x < b.x && Mouse.y >= a.y && Mouse.y < b.y) Hover = static_cast<int>(i);
         }
         if (ImGui::IsWindowHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) S.m_Selected = Hover;      // (left click: select, empty: none)
-        if (bRightClick && Hover > 0) { S.m_Menu = Hover - 1; ImGui::OpenPopup("##node"); }
+        if (bRightClick && Hover > 1) { S.m_Menu = Hover - 2; ImGui::OpenPopup("##node"); }
         const ImU32 kWire = IM_COL32(150, 180, 220, 255), kBox = IM_COL32(48, 52, 60, 255), kHead = IM_COL32(70, 90, 120, 255), kSel = IM_COL32(230, 180, 90, 255), kText = IM_COL32(230, 230, 230, 255), kDim = IM_COL32(140, 140, 140, 255);
         {
             std::vector<float> Lit(Edges.size(), 0.0f);
             for (const int Focus : { S.m_Selected, Hover })
-                if (Focus > 0) for (std::size_t e = 0; e < Edges.size(); ++e) if (Edges[e].m_From == Focus || Edges[e].m_To == Focus) Lit[e] = Focus == S.m_Selected ? 1.0f : std::max(Lit[e], 0.9f);
+                if (Focus > 1) for (std::size_t e = 0; e < Edges.size(); ++e) if (Edges[e].m_From == Focus || Edges[e].m_To == Focus) Lit[e] = Focus == S.m_Selected ? 1.0f : std::max(Lit[e], 0.9f);
             V.DrawRoutes(pDL, Style, R, std::vector<ImU32>(R.m_Sources.size(), kWire), Lit);
         }
         ImFont* pFont = ImGui::GetFont();
@@ -123,8 +166,8 @@ namespace xrender_graph_editor::canvas
                 Text(ImVec2(b.x - V.Len(8) - ImGui::CalcTextSize(St.m_Out[r].c_str()).x * V.m_Zoom, y - Font * 0.5f), ImGui::GetColorU32(kText), St.m_Out[r]);
             }
             ImGui::PopStyleVar();
-            if (i == 0) continue;           // (the lit image: not a node)
-            const int n = static_cast<int>(i) - 1;
+            if (i < 2) continue;            // (the Scene and Last frame: not nodes)
+            const int n = static_cast<int>(i) - 2;
             ImGui::PushID(n);
             ImGui::SetCursorScreenPos(ImVec2(b.x - 22, a.y + (V.Len(gl::geo::HEADER_H) - ImGui::GetFrameHeight()) * 0.5f));      // the bypass checkbox in the header's right corner
             bool bOn = St.m_bOn;
@@ -138,7 +181,7 @@ namespace xrender_graph_editor::canvas
             const int n = S.m_Menu;
             if (n >= 0 && n < static_cast<int>(D.m_Nodes.size()))
             {
-                const auto& St = Steps[static_cast<std::size_t>(n) + 1];
+                const auto& St = Steps[static_cast<std::size_t>(n) + 2];
                 ImGui::TextDisabled("%s", St.m_Name.c_str());
                 if (ImGui::MenuItem(St.m_bOn ? "Bypass" : "Turn on")) Send(std::format("bypass {} {}", n, St.m_bOn ? 0 : 1));
                 if (ImGui::MenuItem("Remove")) Send(std::format("remove {}", n));
