@@ -8,6 +8,7 @@
 #include "source/Tools/Editor/xeditor_descriptor_editor.h"
 #include "plugins/xrender_graph.plugin/source/Module/xrender_graph_descriptor.h"
 #include "plugins/xrender_graph.plugin/source/Editor/xrender_graph_canvas.h"
+#include "plugins/xrender_graph.plugin/source/Module/xrender_graph_node_types.h"
 
 namespace xrender_graph_editor
 {
@@ -22,10 +23,21 @@ namespace xrender_graph_editor
             auto& D = static_cast<xrender_graph::descriptor&>(*m_Document.m_pDescriptor);
             auto Desc = D.ToDesc();
             std::string Message;
-            if (!xlionrender::post::Edit(Desc, Edit, Message)) return Message;
             xproperty::settings::context C;
             const auto Before = xproperty::ui::undo::SnapshotToString(*D.getProperties(), &D, C);
-            D.FromDesc(Desc);
+            if (Edit.starts_with("insert-custom "))     // "insert-custom <gap> <node type hex>": a shader node (post::Edit knows no node types)
+            {
+                int Gap = -1; std::uint64_t Type = 0;
+                if (std::sscanf(Edit.c_str() + 14, "%d %llx", &Gap, reinterpret_cast<unsigned long long*>(&Type)) != 2 || Gap < 0 || Gap > static_cast<int>(D.m_Nodes.size())) return "not an edit: insert-custom <gap> <node type>";
+                auto Cand = D; Cand.m_Nodes.insert(Cand.m_Nodes.begin() + Gap, xrender_graph::node_entry{ xlionrender::post::node_type::CUSTOM, true, Type });
+                if (const auto P = xlionrender::post::Lower(Cand.ToDesc(), 64, 64); !P.m_Error.empty()) return "refused: " + P.m_Error;
+                D.m_Nodes = Cand.m_Nodes;
+            }
+            else
+            {
+                if (!xlionrender::post::Edit(Desc, Edit, Message)) return Message;
+                D.FromDesc(Desc);
+            }
             const auto After = xproperty::ui::undo::SnapshotToString(*D.getProperties(), &D, C);
             xproperty::ui::undo::ApplySnapshotFromString(*D.getProperties(), &D, Before, C);       // (the command applies it: undo has the before)
             if (auto Err = m_Undo.Execute(std::format("SnapshotEdit -Label {} -Before {} -After {}", xeditor::Quote(Edit), xeditor::Quote(Before), xeditor::Quote(After))); !Err.empty()) return Err;
@@ -36,9 +48,24 @@ namespace xrender_graph_editor
         {
             m_Document.Load();
             BindDescriptorInspector();
+            {   // the system shader node types (the plugin's NodeTypes): the graph's "Insert shader node" menu and the names of the custom nodes
+                std::string Problems;
+                for (const auto& T : xrender_graph::node_types::Read(std::filesystem::path(xresource_editor::g_LibMgr.m_ProjectPath) / "Cache" / "Plugins" / "xrender_graph.plugin" / "NodeTypes", Problems))
+                    m_Canvas.m_CustomTypes.push_back({ T.m_Id, T.m_Name, T.m_Description });
+            }
             AddPanel("Post chain", dock::left, [this] { m_DescriptorInspector.Show(); });
             AddPanel("Graph", dock::center, [this]      // (the chain as a graph: xgraph's layout and routes, the material stack's)
             {
+                if (m_Document.isLoaded())
+                {
+                    m_Canvas.m_CustomNames.clear();         // (per custom node in order: its type's name)
+                    for (const auto& N : static_cast<const xrender_graph::descriptor&>(*m_Document.m_pDescriptor).m_Nodes)
+                        if (N.m_Type == xlionrender::post::node_type::CUSTOM)
+                        {
+                            const auto It = std::find_if(m_Canvas.m_CustomTypes.begin(), m_Canvas.m_CustomTypes.end(), [&](const auto& T) { return T.m_Id == N.m_NodeType; });
+                            m_Canvas.m_CustomNames.push_back(It != m_Canvas.m_CustomTypes.end() ? It->m_Name : std::format("Custom #{:016X}?", N.m_NodeType));
+                        }
+                }
                 if (m_Document.isLoaded()) canvas::Draw(m_Canvas, static_cast<const xrender_graph::descriptor&>(*m_Document.m_pDescriptor).ToDesc(), [this](const std::string& E) { return GraphEdit(E); });
             });
         }

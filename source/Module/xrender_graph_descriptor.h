@@ -42,7 +42,7 @@ namespace xrender_graph
         ( "RenderGraphNode", node_entry
         , obj_member<"Type", &node_entry::m_Type, member_enum_span<node_type_v>, member_help<"What the node does: TAA (temporal antialiasing), Bloom (what is too bright glows), Exposure (adapts to the light), ToneMap (HDR to the display: always last)">>
         , obj_member<"On",   &node_entry::m_bOn,  member_help<"Off: bypassed - kept in the recipe, left out of the frame">>
-        , obj_member<"NodeType", &node_entry::m_NodeType, member_help<"Custom only: which system node type (its Id in the plugin's NodeTypes/*.rgn.txt) - its shader runs on the chain image">>
+        , obj_member<"NodeType", &node_entry::m_NodeType, member_flags<flags::DONT_SHOW>, member_help<"Custom only: which system node type (its Id in the plugin's NodeTypes/*.rgn.txt) - its shader runs on the chain image. Hidden: the Graph panel names it (and its Insert shader node menu sets it)">>
         )
     };
     XPROPERTY_REG(node_entry)

@@ -25,11 +25,12 @@ namespace xrender_graph_editor::canvas
 
     struct step { std::string m_Name; std::vector<std::string> m_In, m_Out; bool m_bOn = true; };
 
-    struct state { xgraph::view::view m_View; int m_Menu = -1, m_Selected = -1; std::string m_LastReply; };
+    struct custom_type { std::uint64_t m_Id = 0; std::string m_Name, m_Description; };      // a system node type with a shader (the plugin's NodeTypes)
+    struct state { xgraph::view::view m_View; int m_Menu = -1, m_Selected = -1; std::string m_LastReply; std::vector<custom_type> m_CustomTypes; std::vector<std::string> m_CustomNames; };
     using edit_fn = std::function<std::string(const std::string&)>;      // post::Edit's text ("bypass 1 0") -> "ok" or why not
 
     // The chain's steps (an "HDR" source first: the lit image the chain starts from) and its wires
-    inline void Build(const post::desc& D, std::vector<step>& Steps, std::vector<gl::edge>& Edges) noexcept
+    inline void Build(const post::desc& D, std::vector<step>& Steps, std::vector<gl::edge>& Edges, const std::vector<std::string>& CustomNames = {}) noexcept
     {
         Steps.clear(); Edges.clear();
         Steps.push_back({ "Lit image", {}, { "HDR" }, true });
@@ -43,6 +44,10 @@ namespace xrender_graph_editor::canvas
                 case post::node_type::TAA:      Steps.push_back({ "TAA",      { "HDR" },   { "Image" },    N.m_bOn }); if (N.m_bOn) { Wire(Image, ImageRow, s, 0); Image = s; ImageRow = 0; } break;
                 case post::node_type::BLOOM:    Steps.push_back({ "Bloom",    { "Image" }, { "Bloom" },    N.m_bOn }); if (N.m_bOn) { Wire(Image, ImageRow, s, 0); Bloom = s; } break;
                 case post::node_type::EXPOSURE: Steps.push_back({ "Exposure", { "Image" }, { "Exposure" }, N.m_bOn }); if (N.m_bOn) { Wire(Image, ImageRow, s, 0); Expo = s; } break;
+                case post::node_type::CUSTOM:   // (a shader node: the chain image in, the next chain image out)
+                    Steps.push_back({ N.m_Custom >= 0 && N.m_Custom < static_cast<int>(CustomNames.size()) && !CustomNames[std::size_t(N.m_Custom)].empty() ? CustomNames[std::size_t(N.m_Custom)] : "Custom", { "Image" }, { "Image" }, N.m_bOn });
+                    if (N.m_bOn) { Wire(Image, ImageRow, s, 0); Image = s; ImageRow = 0; }
+                    break;
                 case post::node_type::TONE_MAP:
                     Steps.push_back({ "Tone map", { "Image", "Bloom", "Exposure" }, { "Output" }, N.m_bOn });
                     Wire(Image, ImageRow, s, 0);
@@ -57,7 +62,7 @@ namespace xrender_graph_editor::canvas
     {
         const auto Send = [&](const std::string& Edit) { S.m_LastReply = Edit + ": " + EditFn(Edit); };
         std::vector<step> Steps; std::vector<gl::edge> Edges;
-        Build(D, Steps, Edges);
+        Build(D, Steps, Edges, S.m_CustomNames);
         gl::input In(1);
         for (const auto& St : Steps)
         {
@@ -146,6 +151,16 @@ namespace xrender_graph_editor::canvas
                     ImGui::EndMenu();
                 }
                 if (Types.empty() && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) ImGui::SetTooltip("Nothing fits after it (each node once; TAA first, the tone map last)");
+                // shader nodes (the plugin's NodeTypes): any number after TAA, before the tone map
+                if (ImGui::BeginMenu("Insert shader node after", !S.m_CustomTypes.empty()))
+                {
+                    for (const auto& T : S.m_CustomTypes)
+                    {
+                        if (ImGui::MenuItem(T.m_Name.c_str())) Send(std::format("insert-custom {} {:016X}", n + 1, T.m_Id));
+                        if (ImGui::IsItemHovered() && !T.m_Description.empty()) ImGui::SetTooltip("%s", T.m_Description.c_str());
+                    }
+                    ImGui::EndMenu();
+                }
             }
             ImGui::EndPopup();
         }
