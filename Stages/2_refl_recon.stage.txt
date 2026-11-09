@@ -5,10 +5,10 @@
   "refl_recon"
 
 [ StagePasses : 2 ]
-{ Stage:d  Name:s                   Kernel:s        Size:s       Push:s                          }
-//-------  -----------------------  --------------  -----------  -------------------------------
-     0     "reflections: temporal"  "refl_denoise"  "refl.size"  "0,refl.slot,refl.disk_fresh,0"
-     0     "reflections: spatial"   "refl_denoise"  "refl.size"  "1,refl.slot,refl.disk_fresh,0"
+{ Stage:d  Name:s                   Kernel:s        Size:s       Push:s                           RenderPass:s  Repeat:s  RepeatSlot:d }
+//-------  -----------------------  --------------  -----------  -------------------------------  ------------  --------  ------------
+     0     "reflections: temporal"  "refl_denoise"  "refl.size"  "0,refl.slot,refl.disk_fresh,0"       ""          ""          -1     
+     0     "reflections: spatial"   "refl_denoise"  "refl.size"  "1,refl.slot,refl.disk_fresh,0"       ""          ""          -1     
 
 [ StageBindings : 14 ]
 { Stage:d  Pass:d  Kind:s     Name:s                                  Life:s     Usage:s    Write:c  Policy:s          If:s                 }

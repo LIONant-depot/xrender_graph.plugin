@@ -1,0 +1,63 @@
+
+[ Stages : 1 ]
+{ Name:s    }
+//---------
+  "gi_read"
+
+[ StagePasses : 2 ]
+{ Stage:d  Name:s               Kernel:s       Size:s       Push:s                                              RenderPass:s       Repeat:s             RepeatSlot:d }
+//-------  -------------------  -------------  -----------  --------------------------------------------------  -----------------  -------------------  ------------
+     0     "GI read: classify"  "gi_classify"  "view.size"  "gi.table_base,0,gi.divisor,gi.ao_mode"             "GI: screen pass"  ""                        -1     
+     0     "GI read: gather"    "gi_gather"    "view.size"  "gi.table_base,repeat.index,gi.divisor,gi.ao_mode"  "GI: screen pass"  "gi.gather_buffers"        1     
+
+[ StageBindings : 48 ]
+{ Stage:d  Pass:d  Kind:s     Name:s                              Life:s      Usage:s    Write:c  Policy:s    If:s           }
+//-------  ------  ---------  ----------------------------------  ----------  ---------  -------  ----------  --------------
+     0       0     "buffer"   "Frame: instance data"              "retained"  "storage"     0     "none"      ""            
+     0       0     "buffer"   "GI: dummy"                         "retained"  "storage"     0     "none"      "never"       
+     0       0     "buffer"   "GI: light ring"                    "retained"  "storage"     0     "none"      ""            
+     0       0     "buffer"   "GI: moment ring"                   "retained"  "storage"     0     "none"      ""            
+     0       0     "buffer"   "GI: screen buffer*"                "frame"     "storage"     1     "partial"   ""            
+     0       0     "buffer"   "GI: screen buffer previous"        "retained"  "storage"     0     "none"      ""            
+     0       0     "buffer"   "GI: gather table"                  "frame"     "storage"     0     "none"      ""            
+     0       0     "buffer"   "GI: ambient occlusion"             "frame"     "storage"     0     "none"      "gi.ao"       
+     0       0     "buffer"   "GI: voxel clipmap"                 "retained"  "storage"     0     "none"      "gi.clip"     
+     0       0     "buffer"   "GI: reference samples"             "retained"  "storage"     0     "none"      "gi.reference"
+     0       0     "buffer"   "GI: reference sums"                "retained"  "storage"     1     "partial"   "gi.reference"
+     0       0     "buffer"   "GI: the published voxel light"     "retained"  "storage"     0     "none"      "gi.voxpub"   
+     0       0     "buffer"   "Heat: the gather's clock a pixel"  "frame"     "storage"     1     "partial"   "gi.heat"     
+     0       0     "texture"  "Probes: environment DFG"           "frame"     "sampled"     0     "none"      ""            
+     0       0     "texture"  "Probes: environment atlas"         "frame"     "sampled"     0     "none"      ""            
+     0       0     "texture"  "Probes: probe atlas"               "frame"     "sampled"     0     "none"      ""            
+     0       0     "texture"  "Render target: contact shadow"     "frame"     "sampled"     0     "none"      ""            
+     0       0     "texture"  "Render target: depth"              "frame"     "sampled"     0     "none"      ""            
+     0       0     "texture"  "Render target: prepass ids"        "frame"     "sampled"     0     "none"      ""            
+     0       0     "texture"  "Render target: prepass normals"    "frame"     "sampled"     0     "none"      ""            
+     0       0     "texture"  "Render target: sun shadow mask"    "frame"     "sampled"     0     "none"      ""            
+     0       0     "texture"  "Shadows: white dummy"              "frame"     "sampled"     0     "none"      ""            
+     0       0     "image"    "GI: screen colour"                 "frame"     "color"       1     "discard"   ""            
+     0       0     "image"    "GI: screen depth"                  "frame"     "depth"       1     "discard"   ""            
+     0       1     "buffer"   "Frame: instance data"              "retained"  "storage"     0     "none"      ""            
+     0       1     "buffer"   "GI: gather buffers"                "retained"  "storage"     0     "none"      ""            
+     0       1     "buffer"   "GI: light ring"                    "retained"  "storage"     0     "none"      ""            
+     0       1     "buffer"   "GI: moment ring"                   "retained"  "storage"     0     "none"      ""            
+     0       1     "buffer"   "GI: screen buffer*"                "frame"     "storage"     1     "partial"   ""            
+     0       1     "buffer"   "GI: screen buffer previous"        "retained"  "storage"     0     "none"      ""            
+     0       1     "buffer"   "GI: gather table"                  "frame"     "storage"     0     "none"      ""            
+     0       1     "buffer"   "GI: ambient occlusion"             "frame"     "storage"     0     "none"      "gi.ao"       
+     0       1     "buffer"   "GI: voxel clipmap"                 "retained"  "storage"     0     "none"      "gi.clip"     
+     0       1     "buffer"   "GI: reference samples"             "retained"  "storage"     0     "none"      "gi.reference"
+     0       1     "buffer"   "GI: reference sums"                "retained"  "storage"     1     "partial"   "gi.reference"
+     0       1     "buffer"   "GI: the published voxel light"     "retained"  "storage"     0     "none"      "gi.voxpub"   
+     0       1     "buffer"   "Heat: the gather's clock a pixel"  "frame"     "storage"     1     "partial"   "gi.heat"     
+     0       1     "texture"  "Probes: environment DFG"           "frame"     "sampled"     0     "none"      ""            
+     0       1     "texture"  "Probes: environment atlas"         "frame"     "sampled"     0     "none"      ""            
+     0       1     "texture"  "Probes: probe atlas"               "frame"     "sampled"     0     "none"      ""            
+     0       1     "texture"  "Render target: contact shadow"     "frame"     "sampled"     0     "none"      ""            
+     0       1     "texture"  "Render target: depth"              "frame"     "sampled"     0     "none"      ""            
+     0       1     "texture"  "Render target: prepass ids"        "frame"     "sampled"     0     "none"      ""            
+     0       1     "texture"  "Render target: prepass normals"    "frame"     "sampled"     0     "none"      ""            
+     0       1     "texture"  "Render target: sun shadow mask"    "frame"     "sampled"     0     "none"      ""            
+     0       1     "texture"  "Shadows: white dummy"              "frame"     "sampled"     0     "none"      ""            
+     0       1     "image"    "GI: screen colour"                 "frame"     "color"       1     "preserve"  ""            
+     0       1     "image"    "GI: screen depth"                  "frame"     "depth"       1     "preserve"  ""            
