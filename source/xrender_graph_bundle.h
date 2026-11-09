@@ -8,11 +8,13 @@
 //      [ Bundle ]      { Version:d  Abi:d }
 //      [ Links ]       { Kind:s  Guid:G  Hash:G }        "shader" / "dll"
 //      [ PostGraph ]   [ Params ]                         xlionrender::post::Serialize
+//      [ Stages ]  [ StagePasses ]  [ StageBindings ]   xlionrender::stage::Serialize (the plugin's Stages/*.stage.txt: the frame stages' descriptions)
 #include "dependencies/xLIONRender/src/xlionrender_post_graph_text.h"
+#include "dependencies/xLIONRender/src/xlionrender_stage_graph_text.h"
 
 namespace xrender_graph
 {
-    inline constexpr int bundle_version_v = 4;      // the root's format (2: the PostGraph table's Custom column; 3: ShaderWords; 4: the custom nodes' Params column)
+    inline constexpr int bundle_version_v = 5;      // the root's format (2: the PostGraph table's Custom column; 3: ShaderWords; 4: the custom nodes' Params column; 5: the stages)
     inline constexpr int node_abi_v       = 1;      // the node contract the root was compiled against (the built-in post nodes)
 
     struct bundle
@@ -22,6 +24,7 @@ namespace xrender_graph
         std::vector<link>           m_Links;
         std::vector<std::vector<std::int32_t>> m_Spirv;     // per shader link, in order: the custom nodes' shaders (custom node i: link i)
         xlionrender::post::desc     m_Desc;
+        xlionrender::stage::library m_Stages;       // the frame stages by name, in place of the renderer's built-in descriptions
 
         // Problem: why the bundle cannot be used (a version or ABI this build does not know, a node row refused)
         xerr Serialize(xtextfile::stream& F, std::string& Problem) noexcept
@@ -42,7 +45,8 @@ namespace xrender_graph
                 m_Spirv.assign(m_Links.size(), {});
                 for (const auto& [l, w] : Words) { if (l < 0 || l >= static_cast<int>(m_Links.size())) { Problem = std::format("a shader word of link {} (there are {})", l, m_Links.size()); return {}; } m_Spirv[std::size_t(l)].push_back(static_cast<std::int32_t>(w)); }
             }
-            return xlionrender::post::Serialize(F, m_Desc, Problem);
+            if (auto Err = xlionrender::post::Serialize(F, m_Desc, Problem); Err || !Problem.empty()) return Err;
+            return xlionrender::stage::Serialize(F, m_Stages, Problem);
         }
     };
 }

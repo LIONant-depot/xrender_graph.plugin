@@ -90,6 +90,35 @@ namespace xrender_graph_compiler
                     m_Dependencies.m_Assets.push_back(std::filesystem::relative(It->m_File.parent_path() / It->m_Code, Project).wstring());
                 }
             }
+            // The frame stages (render graph R3): the plugin's Stages/*.stage.txt, each a library of named stages (xlionrender_stage_graph_text.h),
+            // into the bundle - the renderer uses them in place of its built-in descriptions (one that does not lower: the built-in code, said once)
+            {
+                const std::filesystem::path Project = m_ProjectPaths.m_Project;
+                const auto Dir = Project / "Cache" / "Plugins" / "xrender_graph.plugin" / "Stages";
+                std::error_code Ec;
+                std::vector<std::filesystem::path> Files;
+                for (const auto& E : std::filesystem::directory_iterator(Dir, Ec)) if (E.path().filename().wstring().ends_with(L".stage.txt")) Files.push_back(E.path());
+                std::sort(Files.begin(), Files.end());
+                for (const auto& File : Files)
+                {
+                    xlionrender::stage::library L;
+                    std::string Problem;
+                    xtextfile::stream S;
+                    xerr Err = S.Open(true, File.wstring(), xtextfile::file_type::TEXT);
+                    if (!Err) Err = xlionrender::stage::Serialize(S, L, Problem);
+                    if (Err || !Problem.empty())
+                    {
+                        LogMessage(xresource_pipeline::msg_type::ERROR, std::format("{}: {}", File.filename().string(), Problem.empty() ? std::string(Err.getMessage()) : Problem));
+                        return xerr::create_f<state, "RenderGraph: a stage description does not read (see the log)">();
+                    }
+                    for (auto& [N, D] : L)
+                    {
+                        if (std::any_of(B.m_Stages.begin(), B.m_Stages.end(), [&](const auto& P) { return P.first == N; })) { LogMessage(xresource_pipeline::msg_type::ERROR, std::format("{}: the stage '{}' is described twice", File.filename().string(), N)); return xerr::create_f<state, "RenderGraph: a stage is described twice">(); }
+                        B.m_Stages.emplace_back(std::move(N), std::move(D));
+                    }
+                    m_Dependencies.m_Assets.push_back(std::filesystem::relative(File, Project).wstring());     // (a stage file edited: compile again)
+                }
+            }
             for (auto& T : m_Target)
             {
                 if (!T.m_bValid) continue;

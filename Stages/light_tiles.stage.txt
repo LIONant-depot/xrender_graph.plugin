@@ -1,0 +1,17 @@
+
+[ Stages : 1 ]
+{ Name:s        }
+//-------------
+  "light_tiles"
+
+[ StagePasses : 1 ]
+{ Stage:d  Name:s         Kernel:s       Size:s       Push:s                                                                  }
+//-------  -------------  -------------  -----------  -----------------------------------------------------------------------
+     0     "light tiles"  "light_tiles"  "view.size"  "frame.c2w,view.width,view.height,lights.local_base,lights.local_count"
+
+[ StageBindings : 3 ]
+{ Stage:d  Pass:d  Kind:s     Name:s                             Life:s      Usage:s    Write:c  Policy:s          If:s }
+//-------  ------  ---------  ---------------------------------  ----------  ---------  -------  ----------------  ----
+     0       0     "buffer"   "Lights: light ring"               "retained"  "storage"     0     "none"             "" 
+     0       0     "buffer"   "Lights: the screen tiles' lists"  "frame"     "storage"     1     "full_overwrite"   "" 
+     0       0     "texture"  "Render target: depth"             "frame"     "sampled"     0     "none"             "" 

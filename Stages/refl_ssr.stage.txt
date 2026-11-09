@@ -1,0 +1,19 @@
+
+[ Stages : 1 ]
+{ Name:s     }
+//----------
+  "refl_ssr"
+
+[ StagePasses : 1 ]
+{ Stage:d  Name:s                       Kernel:s    Size:s       Push:s                                                                                                }
+//-------  ---------------------------  ----------  -----------  -----------------------------------------------------------------------------------------------------
+     0     "reflections: screen trace"  "refl_ssr"  "refl.size"  "refl.slot,0,refl.ssr_frame,refl.ssr_steps,refl.ssr_max_dist,refl.ssr_thickness,refl.ssr_max_rough,0"
+
+[ StageBindings : 5 ]
+{ Stage:d  Pass:d  Kind:s     Name:s                             Life:s     Usage:s    Write:c  Policy:s          If:s            }
+//-------  ------  ---------  ---------------------------------  ---------  ---------  -------  ----------------  ---------------
+     0       0     "buffer"   "Frame: reflection frames"         "frame"    "storage"     0     "none"            ""             
+     0       0     "buffer"   "Render target: tail records"      "frame"    "storage"     1     "full_overwrite"  ""             
+     0       0     "texture"  "Render target: tail colour"       "frame"    "sampled"     0     "none"            ""             
+     0       0     "texture"  "Render target: tail depth"        "frame"    "sampled"     0     "none"            ""             
+     0       0     "texture"  "Render target: last frame's HDR"  "history"  "sampled"     0     "none"            "view.hdr_prev"
