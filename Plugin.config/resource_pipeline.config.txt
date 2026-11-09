@@ -1,0 +1,17 @@
+
+// New Types
+< s32:d u32:g s16:C u16:H s8:c u8:h f32:f f64:F string:s wstring:S u64:G s64:D bool:c enum:s >
+
+[ xProperties : 10 ]
+{ Name:s                            Value:?                   }
+//--------------------------------  -------------------------
+  "PipelinePlugin/TypeName"                  ;string "RenderGraph"
+  "PipelinePlugin/Group"                     ;string "Graphics"
+  "PipelinePlugin/Description"               ;string "How a Level's frame is finished: the post chain (TAA, bloom, exposure, tone map), its order, bypasses and parameters."
+  "PipelinePlugin/FileExtension"             ;wstring ""
+  "PipelinePlugin/TypeGUID/Value"            ;u64    #1BDCDE0D1FF7D371
+  "PipelinePlugin/IconPaths[]"                      ;s64    1
+  "PipelinePlugin/IconPaths[G:0]"                      ;wstring "icon.png"
+  "PipelinePlugin/Details/CompilationScript" ;wstring "Cache\\Plugins\\xrender_graph.plugin\\Build\\CreateAndBuildProject.bat"
+  "PipelinePlugin/Details/DebugCompiler"     ;wstring "Cache\\Plugins\\xrender_graph.plugin\\Build\\xrender_graph_compiler.vs2022\\Debug\\xrender_graph_compiler.exe"
+  "PipelinePlugin/Details/ReleaseCompiler"   ;wstring "Cache\\Plugins\\xrender_graph.plugin\\Build\\xrender_graph_compiler.vs2022\\Release\\xrender_graph_compiler.exe"
