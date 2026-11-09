@@ -1,0 +1,18 @@
+
+[ Stages : 1 ]
+{ Name:s          }
+//---------------
+  "local_request"
+
+[ StagePasses : 1 ]
+{ Stage:d  Name:s                                Kernel:s         Size:s       Push:s                                                        RenderPass:s  Repeat:s  RepeatSlot:d }
+//-------  ------------------------------------  ---------------  -----------  ------------------------------------------------------------  ------------  --------  ------------
+     0     "Shadows: local light requests made"  "local_request"  "view.size"  "shadow.slot,0,view.width,view.height,local.bit_uints,0,0,0"       ""          ""          -1     
+
+[ StageBindings : 4 ]
+{ Stage:d  Pass:d  Kind:s     Name:s                           Life:s   Usage:s    Write:c  Policy:s   If:s }
+//-------  ------  ---------  -------------------------------  -------  ---------  -------  ---------  ----
+     0       0     "buffer"   "Shadows: local light frames"    "frame"  "storage"     0     "none"      "" 
+     0       0     "buffer"   "Shadows: local light requests"  "frame"  "storage"     1     "partial"   "" 
+     0       0     "buffer"   "Lights: cell ring"              "frame"  "storage"     0     "none"      "" 
+     0       0     "texture"  "Render target: depth"           "frame"  "storage"     0     "none"      "" 
