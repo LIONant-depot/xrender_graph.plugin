@@ -1,0 +1,6 @@
+// A render graph node type (a system node): see Vignette.rgn.txt. Identity copies the chain image unchanged (the shader-node checks' reference).
+[ RenderNodeType ]
+{ Id:G  Name:s  Category:s  Code:s  Description:s }
+//----  ------  ----------  ------  -------------
+  #6A1C0F4E2B9D3E71  "Identity"  "Utility"  "Identity.glsl"  "Passes the image through unchanged."
+

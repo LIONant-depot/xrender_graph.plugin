@@ -26,6 +26,7 @@ namespace xrender_graph
     , xproperty::settings::enum_item("Bloom",    post::node_type::BLOOM)
     , xproperty::settings::enum_item("Exposure", post::node_type::EXPOSURE)
     , xproperty::settings::enum_item("ToneMap",  post::node_type::TONE_MAP)
+    , xproperty::settings::enum_item("Custom",   post::node_type::CUSTOM)
     };
     inline constexpr auto param_type_v = std::array
     { xproperty::settings::enum_item("Float", post::param_type::FLOAT)
@@ -36,10 +37,12 @@ namespace xrender_graph
     {
         post::node_type m_Type = post::node_type::TONE_MAP;
         bool            m_bOn  = true;
+        std::uint64_t   m_NodeType = 0;     // a Custom node's system node type (the plugin's NodeTypes/<Name>.rgn.txt Id)
         XPROPERTY_DEF
         ( "RenderGraphNode", node_entry
         , obj_member<"Type", &node_entry::m_Type, member_enum_span<node_type_v>, member_help<"What the node does: TAA (temporal antialiasing), Bloom (what is too bright glows), Exposure (adapts to the light), ToneMap (HDR to the display: always last)">>
         , obj_member<"On",   &node_entry::m_bOn,  member_help<"Off: bypassed - kept in the recipe, left out of the frame">>
+        , obj_member<"NodeType", &node_entry::m_NodeType, member_help<"Custom only: which system node type (its Id in the plugin's NodeTypes/*.rgn.txt) - its shader runs on the chain image">>
         )
     };
     XPROPERTY_REG(node_entry)
@@ -73,14 +76,19 @@ namespace xrender_graph
         post::desc ToDesc() const noexcept
         {
             post::desc D;
-            for (const auto& N : m_Nodes)  D.m_Nodes.push_back({ N.m_Type, N.m_bOn });
+            int nCustom = 0;
+            for (const auto& N : m_Nodes)  D.m_Nodes.push_back({ N.m_Type, N.m_bOn, N.m_Type == post::node_type::CUSTOM ? nCustom++ : -1 });     // (a custom node's shader: the bundle's n-th link)
             for (const auto& P : m_Params) D.m_Params.push_back({ P.m_Name, P.m_Source, P.m_Type, P.m_Default, P.m_Min, P.m_Max });
             return D;
         }
         void FromDesc(const post::desc& D) noexcept
         {
+            // (a custom node keeps its node type: post::desc numbers custom nodes (m_Custom) as ToDesc did, in this list's order)
+            std::vector<std::uint64_t> CustomTypes;
+            for (const auto& N : m_Nodes) if (N.m_Type == post::node_type::CUSTOM) CustomTypes.push_back(N.m_NodeType);
             m_Nodes.clear(); m_Params.clear();
-            for (const auto& N : D.m_Nodes)  m_Nodes.push_back({ N.m_Type, N.m_bOn });
+            for (const auto& N : D.m_Nodes)
+                m_Nodes.push_back({ N.m_Type, N.m_bOn, N.m_Type == post::node_type::CUSTOM && N.m_Custom >= 0 && N.m_Custom < static_cast<int>(CustomTypes.size()) ? CustomTypes[std::size_t(N.m_Custom)] : 0 });
             for (const auto& P : D.m_Params) m_Params.push_back({ P.m_Name, P.m_Source, P.m_Type, P.m_Default, P.m_Min, P.m_Max });
         }
 

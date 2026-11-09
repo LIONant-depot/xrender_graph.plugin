@@ -10,7 +10,9 @@ xresource::loader< xrsc::render_graph_type_guid_v >::data_type* xresource::loade
     if (auto Err = S.Open(true, Path, xtextfile::file_type::TEXT); Err) return nullptr;     // (not compiled yet)
     auto pBundle = std::make_unique<xrender_graph::bundle>();
     std::string Problem;
-    if (auto Err = pBundle->Serialize(S, Problem); Err || !Problem.empty() || !pBundle->m_Links.empty()) return nullptr;     // (links: none can be loaded yet - stages I/J)
+    if (auto Err = pBundle->Serialize(S, Problem); Err || !Problem.empty()) return nullptr;
+    for (std::size_t l = 0; l < pBundle->m_Links.size(); ++l)       // (shaders: their words came with the bundle; a DLL link (stage J) cannot be loaded yet)
+        if (pBundle->m_Links[l].m_Kind != "shader" || pBundle->m_Spirv[l].empty()) return nullptr;
     return pBundle.release();
 }
 

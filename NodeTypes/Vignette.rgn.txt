@@ -1,0 +1,8 @@
+// A render graph node type (a system node: the plugin's data): what the RenderGraph editor shows (Name, Category, Description) and its
+// compute shader (Code: a file beside this one, xlionrender_post_node.glsl's frame + the function Node). Id: never change it - render
+// graphs refer to the node by it; a new node type takes a new guid.
+[ RenderNodeType ]
+{ Id:G  Name:s  Category:s  Code:s  Description:s }
+//----  ------  ----------  ------  -------------
+  #D75B7E72421A7BAF  "Vignette"  "Image"  "Vignette.glsl"  "Darkens the image toward its corners, as a lens does."
+

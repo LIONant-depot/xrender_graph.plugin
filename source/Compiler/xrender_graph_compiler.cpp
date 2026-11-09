@@ -6,6 +6,11 @@
 #include "plugins/xrender_graph.plugin/source/Module/xrender_graph_descriptor.h"
 #include "plugins/xrender_graph.plugin/source/xrender_graph_bundle.h"
 #include "source/Compiler/xrender_graph_compiler.h"
+#include "plugins/xrender_graph.plugin/source/Module/xrender_graph_node_types.h"
+#include <shaderc/shaderc.hpp>
+#if defined(_WIN32)
+    #pragma comment(lib, "../../dependencies/shaderc/lib/shaderc_combined.lib")
+#endif
 
 #include "dependencies/xproperty/source/xcore/my_properties.cpp"
 
@@ -33,8 +38,47 @@ namespace xrender_graph_compiler
             }
 
             displayProgressBar("Writing the compiled chain", 0.7f);
-            xrender_graph::bundle B;            // (the root; no links: the post nodes are built into the engine)
+            xrender_graph::bundle B;
             B.m_Desc = Descriptor.ToDesc();
+
+            // The custom nodes' shaders (stage I): each its system node type's GLSL (the plugin's NodeTypes), after the node frame
+            // (xlionrender_post_node.glsl), compiled to SPIR-V - a shader link of the bundle, in the order of the custom nodes
+            if (std::any_of(Descriptor.m_Nodes.begin(), Descriptor.m_Nodes.end(), [](const auto& N) { return N.m_Type == xlionrender::post::node_type::CUSTOM; }))
+            {
+                displayProgressBar("Compiling the node shaders", 0.5f);
+                const std::filesystem::path Project = m_ProjectPaths.m_Project;
+                std::string Problems, Frame;
+                const auto Types = xrender_graph::node_types::Read(Project / "Cache" / "Plugins" / "xrender_graph.plugin" / "NodeTypes", Problems);
+                if (!Problems.empty()) LogMessage(xresource_pipeline::msg_type::WARNING, Problems);
+                if (!xrender_graph::node_types::ReadText(Project / "Cache" / "dependencies" / "xLIONRender" / "src" / "shaders" / "xlionrender_post_node.glsl", Frame))
+                    return xerr::create_f<state, "RenderGraph: the node frame (xlionrender_post_node.glsl) is missing">();
+                shaderc::Compiler Compiler;
+                for (std::size_t n = 0; n < Descriptor.m_Nodes.size(); ++n)
+                {
+                    const auto& N = Descriptor.m_Nodes[n];
+                    if (N.m_Type != xlionrender::post::node_type::CUSTOM) continue;
+                    const auto It = std::find_if(Types.begin(), Types.end(), [&](const auto& T) { return T.m_Id == N.m_NodeType; });
+                    if (It == Types.end()) { LogMessage(xresource_pipeline::msg_type::ERROR, std::format("node {}: no system node type #{:016X} (the plugin's NodeTypes)", n, N.m_NodeType)); return xerr::create_f<state, "RenderGraph: a custom node's type is missing">(); }
+                    std::string Code;
+                    if (!xrender_graph::node_types::ReadText(It->m_File.parent_path() / It->m_Code, Code)) { LogMessage(xresource_pipeline::msg_type::ERROR, std::format("node {} ({}): its shader {} does not read", n, It->m_Name, It->m_Code)); return xerr::create_f<state, "RenderGraph: a node shader is missing">(); }
+                    shaderc::CompileOptions Options;
+                    Options.SetOptimizationLevel(shaderc_optimization_level_performance);
+                    Options.SetTargetEnvironment(shaderc_target_env_vulkan, shaderc_env_version_vulkan_1_2);
+                    const std::string Source = "#version 450\n" + Frame + "\n#line 1 1\n" + Code;
+                    const auto R = Compiler.CompileGlslToSpv(Source, shaderc_glsl_compute_shader, It->m_Code.c_str(), Options);
+                    if (R.GetCompilationStatus() != shaderc_compilation_status_success)
+                    {
+                        LogMessage(xresource_pipeline::msg_type::ERROR, std::format("node {} ({}): {}", n, It->m_Name, R.GetErrorMessage()));
+                        return xerr::create_f<state, "RenderGraph: a node shader does not compile (see the log)">();
+                    }
+                    std::vector<std::int32_t> Words(R.cbegin(), R.cend());
+                    const std::uint64_t Hash = std::hash<std::string_view>{}(std::string_view(reinterpret_cast<const char*>(Words.data()), Words.size() * 4));
+                    B.m_Links.push_back({ "shader", It->m_Id, Hash });
+                    B.m_Spirv.push_back(std::move(Words));
+                    m_Dependencies.m_Assets.push_back(std::filesystem::relative(It->m_File, Project).wstring());                       // (a node type's file or shader edited: compile again)
+                    m_Dependencies.m_Assets.push_back(std::filesystem::relative(It->m_File.parent_path() / It->m_Code, Project).wstring());
+                }
+            }
             for (auto& T : m_Target)
             {
                 if (!T.m_bValid) continue;

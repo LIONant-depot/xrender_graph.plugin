@@ -12,14 +12,15 @@
 
 namespace xrender_graph
 {
-    inline constexpr int bundle_version_v = 2;      // the root's format (2: the PostGraph table's Custom column)
+    inline constexpr int bundle_version_v = 3;      // the root's format (2: the PostGraph table's Custom column; 3: ShaderWords)
     inline constexpr int node_abi_v       = 1;      // the node contract the root was compiled against (the built-in post nodes)
 
     struct bundle
     {
-        struct link { std::string m_Kind; std::uint64_t m_Guid = 0, m_Hash = 0; };
+        struct link { std::string m_Kind; std::uint64_t m_Guid = 0, m_Hash = 0; };      // shader: m_Guid the node type, m_Hash its SPIR-V's
         int                         m_Version = bundle_version_v, m_Abi = node_abi_v;
         std::vector<link>           m_Links;
+        std::vector<std::vector<std::int32_t>> m_Spirv;     // per shader link, in order: the custom nodes' shaders (custom node i: link i)
         xlionrender::post::desc     m_Desc;
 
         // Problem: why the bundle cannot be used (a version or ABI this build does not know, a node row refused)
@@ -30,6 +31,17 @@ namespace xrender_graph
             if (auto Err = F.Record("Links"
                 , [&](std::size_t& Count, xerr&) { if (F.isReading()) m_Links.resize(Count); else Count = m_Links.size(); }
                 , [&](std::size_t i, xerr& E) { false || (E = F.Field("Kind", m_Links[i].m_Kind)) || (E = F.Field("Guid", m_Links[i].m_Guid)) || (E = F.Field("Hash", m_Links[i].m_Hash)); }); Err) return Err;
+            // the shaders' words, all links in one table (a row a word: the link it belongs to)
+            std::vector<std::pair<int, std::uint32_t>> Words;
+            if (!F.isReading()) for (std::size_t l = 0; l < m_Spirv.size(); ++l) for (const auto w : m_Spirv[l]) Words.emplace_back(static_cast<int>(l), static_cast<std::uint32_t>(w));
+            if (auto Err = F.Record("ShaderWords"
+                , [&](std::size_t& Count, xerr&) { if (F.isReading()) Words.resize(Count); else Count = Words.size(); }
+                , [&](std::size_t i, xerr& E) { false || (E = F.Field("Link", Words[i].first)) || (E = F.Field("Word", Words[i].second)); }); Err) return Err;
+            if (F.isReading())
+            {
+                m_Spirv.assign(m_Links.size(), {});
+                for (const auto& [l, w] : Words) { if (l < 0 || l >= static_cast<int>(m_Links.size())) { Problem = std::format("a shader word of link {} (there are {})", l, m_Links.size()); return {}; } m_Spirv[std::size_t(l)].push_back(static_cast<std::int32_t>(w)); }
+            }
             return xlionrender::post::Serialize(F, m_Desc, Problem);
         }
     };
