@@ -9,12 +9,16 @@
 // "Image" is the chain's image: the last node before that makes one (TAA), else the lit HDR. A bypassed node is drawn faded and makes
 // nothing: its consumers read what is there without it. Editing: a node's checkbox bypasses it, right click a node for remove, move,
 // insert after (only the types that keep the chain valid); every edit is one undoable descriptor edit (EditFn: post::Edit's text, its reply).
-// Right drag pans.
+// Right drag pans. The frame stages (the plugin's Stages: the light tiles, the reflections' screen trace and reconstruction) follow, green:
+// each pass with what it reads and writes - shown, not edited here.
 #include "dependencies/xgraph/source/xgraph_view.h"
 #include "plugins/xrender_graph.plugin/source/Module/xrender_graph_descriptor.h"
+#include "dependencies/xLIONRender/src/xlionrender_stage_graph_text.h"
+#include <format>
 #include "dependencies/imgui/imgui.h"
 #include <functional>
 #include <map>
+#include <set>
 #include <tuple>
 #include <string>
 #include <vector>
@@ -25,10 +29,10 @@ namespace xrender_graph_editor::canvas
     namespace gl = xgraph::layout;
     namespace gr = xgraph::routes;
 
-    struct step { std::string m_Name; std::vector<std::string> m_In, m_Out; bool m_bOn = true; };
+    struct step { std::string m_Name; std::vector<std::string> m_In, m_Out; bool m_bOn = true; bool m_bStage = false; std::string m_Tip; };     // (m_bStage: a frame stage's pass or its source - shown, not edited here)
 
     struct custom_type { std::uint64_t m_Id = 0; std::string m_Name, m_Description; };      // a system node type with a shader (the plugin's NodeTypes)
-    struct state { xgraph::view::view m_View; int m_Menu = -1, m_Selected = -1; std::string m_LastReply; std::vector<custom_type> m_CustomTypes; std::vector<std::string> m_CustomNames; };
+    struct state { xgraph::view::view m_View; int m_Menu = -1, m_Selected = -1; std::string m_LastReply; std::vector<custom_type> m_CustomTypes; std::vector<std::string> m_CustomNames; xlionrender::stage::library m_Stages; };
     using edit_fn = std::function<std::string(const std::string&)>;      // post::Edit's text ("bypass 1 0") -> "ok" or why not
 
     // The chain's steps with their real contracts (stage I, step 2): a node's pins are what its passes read and write (post::Lower's
@@ -49,7 +53,7 @@ namespace xrender_graph_editor::canvas
             default:                    return "Image";        // (CHAIN, TAA_CUR, CUSTOM: the chain image)
         }
     }
-    inline void Build(const post::desc& D, std::vector<step>& Steps, std::vector<gl::edge>& Edges, const std::vector<std::string>& CustomNames = {}) noexcept
+    inline void Build(const post::desc& D, std::vector<step>& Steps, std::vector<gl::edge>& Edges, const std::vector<std::string>& CustomNames = {}, const xlionrender::stage::library& Stages = {}) noexcept
     {
         Steps.clear(); Edges.clear();
         Steps.push_back({ "Scene", {}, { "Lit image", "Depth" }, true });
@@ -99,13 +103,48 @@ namespace xrender_graph_editor::canvas
             if (Row == static_cast<int>(LF.size())) LF.push_back(Name);
             if (Steps[std::size_t(s)].m_bOn) Wire(1, Row, s, r);
         }
+        // The frame stages (render graph R3: the plugin's Stages, what the bundle carries): each pass a step, its pins its bindings (a
+        // pass's own earlier writes folded), wired from the pass that last wrote that resource; what no stage writes comes from
+        // "Frame (code)" - the parts of the frame still hand-written
+        if (Stages.empty()) return;
+        const int Src = static_cast<int>(Steps.size());
+        Steps.push_back({ "Frame (code)", {}, {}, true, true, "What the stages read that the frame's hand-written code makes" });
+        std::map<std::string, std::pair<int, int>> Made;
+        std::set<std::string> History;                                      // (a history read before this frame wrote it: last frame's)
+        for (const auto& [Stage, Sd] : Stages)
+            for (const auto& Pa : Sd.m_Passes)
+            {
+                step St{ Pa.m_Name, {}, {}, true, true, std::format("stage {}, kernel {}, {} push words, dispatched over {}", Stage, Pa.m_Kernel, Pa.m_Push.size(), Pa.m_Size) };
+                for (const auto* pList : { &Pa.m_Buffers, &Pa.m_Textures, &Pa.m_Images })
+                    for (const auto& B : *pList)
+                    {
+                        if (B.m_Life == xlionrender::rg::lifetime::HISTORY) History.insert(B.m_Name);
+                        auto& V = B.m_bWrite ? St.m_Out : St.m_In;
+                        if (std::find(V.begin(), V.end(), B.m_Name) == V.end()) V.push_back(B.m_Name);
+                        if (B.m_bWrite && (B.m_Policy == xlionrender::rg::policy::PRESERVE || B.m_Policy == xlionrender::rg::policy::PARTIAL) && std::find(St.m_In.begin(), St.m_In.end(), B.m_Name) == St.m_In.end()) St.m_In.push_back(B.m_Name);     // (keeps the contents: reads what was there)
+                    }
+                const int s = static_cast<int>(Steps.size());
+                Steps.push_back(St);
+                for (int r = 0; r < static_cast<int>(St.m_In.size()); ++r)
+                {
+                    const auto& Name = St.m_In[std::size_t(r)];
+                    if (const auto It = Made.find(Name); It != Made.end()) { Wire(It->second.first, It->second.second, s, r); continue; }
+                    const int From = History.contains(Name) ? 1 : Src;      // (Last frame, else the hand-written code)
+                    auto& FO = Steps[std::size_t(From)].m_Out;
+                    int Row = static_cast<int>(std::find(FO.begin(), FO.end(), Name) - FO.begin());
+                    if (Row == static_cast<int>(FO.size())) FO.push_back(Name);
+                    Wire(From, Row, s, r);
+                }
+                for (int r = 0; r < static_cast<int>(St.m_Out.size()); ++r) Made[St.m_Out[std::size_t(r)]] = { s, r };
+            }
     }
 
     inline void Draw(state& S, const post::desc& D, const edit_fn& EditFn) noexcept
     {
         const auto Send = [&](const std::string& Edit) { S.m_LastReply = Edit + ": " + EditFn(Edit); };
         std::vector<step> Steps; std::vector<gl::edge> Edges;
-        Build(D, Steps, Edges, S.m_CustomNames);
+        Build(D, Steps, Edges, S.m_CustomNames, S.m_Stages);
+        const int nPost = static_cast<int>(D.m_Nodes.size());      // (steps 2 .. 2 + nPost - 1: the chain's nodes, edited here)
         gl::input In(1);
         for (const auto& St : Steps)
         {
@@ -133,8 +172,9 @@ namespace xrender_graph_editor::canvas
             if (ImGui::IsWindowHovered() && Mouse.x >= a.x && Mouse.x < b.x && Mouse.y >= a.y && Mouse.y < b.y) Hover = static_cast<int>(i);
         }
         if (ImGui::IsWindowHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) S.m_Selected = Hover;      // (left click: select, empty: none)
-        if (bRightClick && Hover > 1) { S.m_Menu = Hover - 2; ImGui::OpenPopup("##node"); }
-        const ImU32 kWire = IM_COL32(150, 180, 220, 255), kBox = IM_COL32(48, 52, 60, 255), kHead = IM_COL32(70, 90, 120, 255), kSel = IM_COL32(230, 180, 90, 255), kText = IM_COL32(230, 230, 230, 255), kDim = IM_COL32(140, 140, 140, 255);
+        if (bRightClick && Hover > 1 && Hover < 2 + nPost) { S.m_Menu = Hover - 2; ImGui::OpenPopup("##node"); }
+        if (Hover >= 2 + nPost && !Steps[std::size_t(Hover)].m_Tip.empty()) ImGui::SetTooltip("%s", Steps[std::size_t(Hover)].m_Tip.c_str());
+        const ImU32 kWire = IM_COL32(150, 180, 220, 255), kBox = IM_COL32(48, 52, 60, 255), kHead = IM_COL32(70, 90, 120, 255), kSel = IM_COL32(230, 180, 90, 255), kText = IM_COL32(230, 230, 230, 255), kDim = IM_COL32(140, 140, 140, 255), kStage = IM_COL32(70, 105, 85, 255);     // (kStage: a frame stage's pass)
         {
             std::vector<float> Lit(Edges.size(), 0.0f);
             for (const int Focus : { S.m_Selected, Hover })
@@ -150,7 +190,7 @@ namespace xrender_graph_editor::canvas
             const ImVec2 a = V.ToScreen(B.m_X, B.m_Y), b = V.ToScreen(B.m_X + B.m_W, B.m_Y + B.m_H);
             ImGui::PushStyleVar(ImGuiStyleVar_Alpha, St.m_bOn ? 1.0f : 0.4f);
             pDL->AddRectFilled(a, b, ImGui::GetColorU32(kBox), V.Len(4.0f));
-            pDL->AddRectFilled(a, ImVec2(b.x, a.y + V.Len(gl::geo::HEADER_H)), ImGui::GetColorU32(St.m_bOn ? kHead : kBox), V.Len(4.0f), ImDrawFlags_RoundCornersTop);
+            pDL->AddRectFilled(a, ImVec2(b.x, a.y + V.Len(gl::geo::HEADER_H)), ImGui::GetColorU32(St.m_bStage ? kStage : St.m_bOn ? kHead : kBox), V.Len(4.0f), ImDrawFlags_RoundCornersTop);
             if (static_cast<int>(i) == S.m_Selected) pDL->AddRect(a, b, kSel, V.Len(4.0f), 0, 2.0f);
             Text(ImVec2(a.x + V.Len(8), a.y + V.Len(5)), ImGui::GetColorU32(kText), St.m_bOn ? St.m_Name : St.m_Name + " (bypassed)");
             for (std::size_t r = 0; r < St.m_In.size(); ++r)
@@ -166,7 +206,7 @@ namespace xrender_graph_editor::canvas
                 Text(ImVec2(b.x - V.Len(8) - ImGui::CalcTextSize(St.m_Out[r].c_str()).x * V.m_Zoom, y - Font * 0.5f), ImGui::GetColorU32(kText), St.m_Out[r]);
             }
             ImGui::PopStyleVar();
-            if (i < 2) continue;            // (the Scene and Last frame: not nodes)
+            if (i < 2 || static_cast<int>(i) >= 2 + nPost) continue;            // (the Scene, Last frame and the stages: not edited here)
             const int n = static_cast<int>(i) - 2;
             ImGui::PushID(n);
             ImGui::SetCursorScreenPos(ImVec2(b.x - 22, a.y + (V.Len(gl::geo::HEADER_H) - ImGui::GetFrameHeight()) * 0.5f));      // the bypass checkbox in the header's right corner
@@ -209,7 +249,7 @@ namespace xrender_graph_editor::canvas
         }
         ImGui::SetCursorScreenPos(ImVec2(ImGui::GetWindowPos().x + 8, ImGui::GetWindowPos().y + ImGui::GetWindowHeight() - 24));
         if (!S.m_LastReply.empty()) ImGui::TextColored(S.m_LastReply.ends_with(": ok") ? ImVec4(0.6f, 0.6f, 0.6f, 1) : ImVec4(1.0f, 0.62f, 0.25f, 1), "%s", S.m_LastReply.c_str());
-        else ImGui::TextDisabled("Click a node to light its wires; right click it: bypass, remove, move, insert after. Right drag pans, the wheel zooms, Home resets.");
+        else ImGui::TextDisabled("Click a node to light its wires; right click it: bypass, remove, move, insert after. Green: the frame stages (the plugin's Stages). Right drag pans, the wheel zooms, Home resets.");
         ImGui::EndChild();
     }
 }

@@ -53,6 +53,19 @@ namespace xrender_graph_editor
                 for (const auto& T : xrender_graph::node_types::Read(std::filesystem::path(xresource_editor::g_LibMgr.m_ProjectPath) / "Cache" / "Plugins" / "xrender_graph.plugin" / "NodeTypes", Problems))
                     m_Canvas.m_CustomTypes.push_back({ T.m_Id, T.m_Name, T.m_Description });
             }
+            {   // the frame stages (the plugin's Stages/*.stage.txt, what the compiler puts in the bundle; files in frame order: 1_, 2_ ...): shown in the graph
+                std::error_code Ec;
+                std::vector<std::filesystem::path> Files;
+                for (const auto& E : std::filesystem::directory_iterator(std::filesystem::path(xresource_editor::g_LibMgr.m_ProjectPath) / "Cache" / "Plugins" / "xrender_graph.plugin" / "Stages", Ec))
+                    if (E.path().filename().wstring().ends_with(L".stage.txt")) Files.push_back(E.path());
+                std::sort(Files.begin(), Files.end());
+                for (const auto& File : Files)
+                {
+                    xlionrender::stage::library L; std::string Problem; xtextfile::stream F;
+                    if (!F.Open(true, File.wstring(), xtextfile::file_type::TEXT) && !xlionrender::stage::Serialize(F, L, Problem) && Problem.empty())
+                        for (auto& S : L) m_Canvas.m_Stages.push_back(std::move(S));
+                }
+            }
             AddPanel("Post chain", dock::left, [this] { m_DescriptorInspector.Show(); });
             AddPanel("Graph", dock::center, [this]      // (the chain as a graph: xgraph's layout and routes, the material stack's)
             {
