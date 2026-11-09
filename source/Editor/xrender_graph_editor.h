@@ -25,7 +25,15 @@ namespace xrender_graph_editor
             std::string Message;
             xproperty::settings::context C;
             const auto Before = xproperty::ui::undo::SnapshotToString(*D.getProperties(), &D, C);
-            if (Edit.starts_with("insert-custom "))     // "insert-custom <gap> <node type hex>": a shader node (post::Edit knows no node types)
+            if (Edit.starts_with("stage "))      // "stage <name> 0|1": a frame stage bypassed or back (the descriptor lists the ones off)
+            {
+                char Name[64] = {}; int On = 1;
+                if (std::sscanf(Edit.c_str() + 6, "%63s %d", Name, &On) != 2) return "not an edit: stage <name> 0|1";
+                if (!xlionrender::stage::Bypassable(Name)) return std::format("the stage '{}' cannot be bypassed", Name);
+                std::erase_if(D.m_Stages, [&](const auto& S) { return S.m_Name == Name; });
+                if (!On) D.m_Stages.push_back({ Name, false });
+            }
+            else if (Edit.starts_with("insert-custom "))     // "insert-custom <gap> <node type hex>": a shader node (post::Edit knows no node types)
             {
                 int Gap = -1; std::uint64_t Type = 0;
                 if (std::sscanf(Edit.c_str() + 14, "%d %llx", &Gap, reinterpret_cast<unsigned long long*>(&Type)) != 2 || Gap < 0 || Gap > static_cast<int>(D.m_Nodes.size())) return "not an edit: insert-custom <gap> <node type>";
@@ -78,6 +86,11 @@ namespace xrender_graph_editor
                             const auto It = std::find_if(m_Canvas.m_CustomTypes.begin(), m_Canvas.m_CustomTypes.end(), [&](const auto& T) { return T.m_Id == N.m_NodeType; });
                             m_Canvas.m_CustomNames.push_back(It != m_Canvas.m_CustomTypes.end() ? It->m_Name : std::format("Custom #{:016X}?", N.m_NodeType));
                         }
+                }
+                if (m_Document.isLoaded())
+                {
+                    m_Canvas.m_StagesOff.clear();
+                    for (const auto& S : static_cast<const xrender_graph::descriptor&>(*m_Document.m_pDescriptor).m_Stages) if (!S.m_bOn) m_Canvas.m_StagesOff.push_back(S.m_Name);
                 }
                 if (m_Document.isLoaded()) canvas::Draw(m_Canvas, static_cast<const xrender_graph::descriptor&>(*m_Document.m_pDescriptor).ToDesc(), [this](const std::string& E) { return GraphEdit(E); });
             });

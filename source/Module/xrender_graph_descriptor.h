@@ -13,6 +13,8 @@
 // No UI in here: the compiler and the editor both include this one header.
 #include "dependencies/xresource_pipeline_v2/source/xresource_pipeline.h"
 #include "dependencies/xLIONRender/src/xlionrender_post_graph.h"
+#include "dependencies/xLIONRender/src/xlionrender_stage_graph.h"
+#include <format>
 
 namespace xrender_graph
 {
@@ -64,13 +66,28 @@ namespace xrender_graph
     };
     XPROPERTY_REG(param_entry)
 
+    // A frame stage the graph bypasses (xlionrender::stage::bypassable_v): only the ones off are listed
+    struct stage_entry
+    {
+        std::string m_Name;
+        bool        m_bOn = false;
+
+        XPROPERTY_DEF
+        ( "RenderGraphStage", stage_entry
+        , obj_member<"Name", &stage_entry::m_Name, member_help<"The stage (refl_ssr, refl_recon, ao, light_tiles: the plugin's Stages)">>
+        , obj_member<"On",   &stage_entry::m_bOn,  member_help<"Off: bypassed - the frame takes its way without it">>
+        )
+    };
+    XPROPERTY_REG(stage_entry)
+
     struct descriptor : xresource_pipeline::descriptor::base
     {
         descriptor() noexcept { FromDesc(post::desc::Default()); }
         void SetupFromSource(std::string_view) override {}
         void Validate(std::vector<std::string>& Errors) const noexcept override
         {
-            if (const auto P = post::Lower(ToDesc(), 64, 64); !P.m_Error.empty()) Errors.push_back(P.m_Error);     // (the renderer's own check: a size of 64 x 64 checks the structure)
+            if (const auto P = post::Lower(ToDesc(), 64, 64); !P.m_Error.empty()) Errors.push_back(P.m_Error);
+            for (const auto& S : m_Stages) if (!xlionrender::stage::Bypassable(S.m_Name)) Errors.push_back(std::format("the stage '{}' cannot be bypassed (refl_ssr, refl_recon, ao, light_tiles)", S.m_Name));     // (the renderer's own check: a size of 64 x 64 checks the structure)
         }
 
         post::desc ToDesc() const noexcept
@@ -94,11 +111,13 @@ namespace xrender_graph
 
         std::vector<node_entry>  m_Nodes;       // in order: TAA first, the tone map last, one of each
         std::vector<param_entry> m_Params;
+        std::vector<stage_entry> m_Stages;      // the frame stages set off (the Graph panel's checkboxes)
 
         XPROPERTY_VDEF
         ( "RenderGraph", descriptor
         , obj_member<"Nodes",  &descriptor::m_Nodes,  member_ui_open<true>, member_help<"The post chain in order (TAA first, ToneMap last, each once). The Post chain view of the Render Graph drawer tab shows what it expands to">>
         , obj_member<"Params", &descriptor::m_Params, member_help<"The values the nodes push, where a frame reads each and its range">>
+        , obj_member<"Stages", &descriptor::m_Stages, member_help<"The frame stages bypassed (the Graph panel's green nodes: their checkboxes)">>
         )
     };
     XPROPERTY_VREG(descriptor)

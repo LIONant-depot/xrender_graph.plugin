@@ -14,7 +14,7 @@
 
 namespace xrender_graph
 {
-    inline constexpr int bundle_version_v = 5;      // the root's format (2: the PostGraph table's Custom column; 3: ShaderWords; 4: the custom nodes' Params column; 5: the stages)
+    inline constexpr int bundle_version_v = 6;      // the root's format (2: the PostGraph table's Custom column; 3: ShaderWords; 4: the custom nodes' Params column; 5: the stages; 6: StagesOff)
     inline constexpr int node_abi_v       = 1;      // the node contract the root was compiled against (the built-in post nodes)
 
     struct bundle
@@ -25,6 +25,7 @@ namespace xrender_graph
         std::vector<std::vector<std::int32_t>> m_Spirv;     // per shader link, in order: the custom nodes' shaders (custom node i: link i)
         xlionrender::post::desc     m_Desc;
         xlionrender::stage::library m_Stages;       // the frame stages by name, in place of the renderer's built-in descriptions
+        std::vector<std::string>    m_StagesOff;    // the stages bypassed (xlionrender::stage::bypassable_v)
 
         // Problem: why the bundle cannot be used (a version or ABI this build does not know, a node row refused)
         xerr Serialize(xtextfile::stream& F, std::string& Problem) noexcept
@@ -46,7 +47,10 @@ namespace xrender_graph
                 for (const auto& [l, w] : Words) { if (l < 0 || l >= static_cast<int>(m_Links.size())) { Problem = std::format("a shader word of link {} (there are {})", l, m_Links.size()); return {}; } m_Spirv[std::size_t(l)].push_back(static_cast<std::int32_t>(w)); }
             }
             if (auto Err = xlionrender::post::Serialize(F, m_Desc, Problem); Err || !Problem.empty()) return Err;
-            return xlionrender::stage::Serialize(F, m_Stages, Problem);
+            if (auto Err = xlionrender::stage::Serialize(F, m_Stages, Problem); Err || !Problem.empty()) return Err;
+            return F.Record("StagesOff"
+                , [&](std::size_t& Count, xerr&) { if (F.isReading()) m_StagesOff.resize(Count); else Count = m_StagesOff.size(); }
+                , [&](std::size_t i, xerr& E) { E = F.Field("Name", m_StagesOff[i]); });
         }
     };
 }

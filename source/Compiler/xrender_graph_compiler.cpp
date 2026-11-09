@@ -40,6 +40,7 @@ namespace xrender_graph_compiler
             displayProgressBar("Writing the compiled chain", 0.7f);
             xrender_graph::bundle B;
             B.m_Desc = Descriptor.ToDesc();
+            for (const auto& S : Descriptor.m_Stages) if (!S.m_bOn) B.m_StagesOff.push_back(S.m_Name);
 
             // The custom nodes' shaders (stage I): each its system node type's GLSL (the plugin's NodeTypes), after the node frame
             // (xlionrender_post_node.glsl), compiled to SPIR-V - a shader link of the bundle, in the order of the custom nodes

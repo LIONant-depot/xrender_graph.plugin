@@ -29,10 +29,10 @@ namespace xrender_graph_editor::canvas
     namespace gl = xgraph::layout;
     namespace gr = xgraph::routes;
 
-    struct step { std::string m_Name; std::vector<std::string> m_In, m_Out; bool m_bOn = true; bool m_bStage = false; std::string m_Tip; };     // (m_bStage: a frame stage's pass or its source - shown, not edited here)
+    struct step { std::string m_Name; std::vector<std::string> m_In, m_Out; bool m_bOn = true; bool m_bStage = false; std::string m_Tip, m_Stage; };     // (m_bStage: a frame stage's pass or its source; m_Stage: its stage's name - a checkbox when it can be bypassed)
 
     struct custom_type { std::uint64_t m_Id = 0; std::string m_Name, m_Description; };      // a system node type with a shader (the plugin's NodeTypes)
-    struct state { xgraph::view::view m_View; int m_Menu = -1, m_Selected = -1; std::string m_LastReply; std::vector<custom_type> m_CustomTypes; std::vector<std::string> m_CustomNames; xlionrender::stage::library m_Stages; };
+    struct state { xgraph::view::view m_View; int m_Menu = -1, m_Selected = -1; std::string m_LastReply; std::vector<custom_type> m_CustomTypes; std::vector<std::string> m_CustomNames; xlionrender::stage::library m_Stages; std::vector<std::string> m_StagesOff; };
     using edit_fn = std::function<std::string(const std::string&)>;      // post::Edit's text ("bypass 1 0") -> "ok" or why not
 
     // The chain's steps with their real contracts (stage I, step 2): a node's pins are what its passes read and write (post::Lower's
@@ -53,7 +53,7 @@ namespace xrender_graph_editor::canvas
             default:                    return "Image";        // (CHAIN, TAA_CUR, CUSTOM: the chain image)
         }
     }
-    inline void Build(const post::desc& D, std::vector<step>& Steps, std::vector<gl::edge>& Edges, const std::vector<std::string>& CustomNames = {}, const xlionrender::stage::library& Stages = {}) noexcept
+    inline void Build(const post::desc& D, std::vector<step>& Steps, std::vector<gl::edge>& Edges, const std::vector<std::string>& CustomNames = {}, const xlionrender::stage::library& Stages = {}, const std::vector<std::string>& StagesOff = {}) noexcept
     {
         Steps.clear(); Edges.clear();
         Steps.push_back({ "Scene", {}, { "Lit image", "Depth" }, true });
@@ -114,7 +114,9 @@ namespace xrender_graph_editor::canvas
         for (const auto& [Stage, Sd] : Stages)
             for (const auto& Pa : Sd.m_Passes)
             {
-                step St{ Pa.m_Name, {}, {}, true, true, std::format("stage {}, kernel {}, {} push words, dispatched over {}", Stage, Pa.m_Kernel, Pa.m_Push.size(), Pa.m_Size) };
+                const bool bOn = std::find(StagesOff.begin(), StagesOff.end(), Stage) == StagesOff.end();
+                step St{ Pa.m_Name, {}, {}, bOn, true, std::format("stage {}, kernel {}, {} push words, {}{}", Stage, Pa.m_Kernel, Pa.m_Push.size(), Pa.m_RenderPass.empty() ? "dispatched over " + Pa.m_Size : "drawn in " + Pa.m_RenderPass
+                       , [&] { for (const auto& B : xlionrender::stage::bypassable_v) if (B.m_Stage == Stage) return std::string("\nits checkbox bypasses it: ") + std::string(B.m_Without); return std::string("\n(not bypassable: the frame has no way without it)"); }()), Stage };
                 for (const auto* pList : { &Pa.m_Buffers, &Pa.m_Textures, &Pa.m_Images })
                     for (const auto& B : *pList)
                     {
@@ -144,7 +146,7 @@ namespace xrender_graph_editor::canvas
     {
         const auto Send = [&](const std::string& Edit) { S.m_LastReply = Edit + ": " + EditFn(Edit); };
         std::vector<step> Steps; std::vector<gl::edge> Edges;
-        Build(D, Steps, Edges, S.m_CustomNames, S.m_Stages);
+        Build(D, Steps, Edges, S.m_CustomNames, S.m_Stages, S.m_StagesOff);
         const int nPost = static_cast<int>(D.m_Nodes.size());      // (steps 2 .. 2 + nPost - 1: the chain's nodes, edited here)
         gl::input In(1);
         for (const auto& St : Steps)
@@ -207,7 +209,16 @@ namespace xrender_graph_editor::canvas
                 Text(ImVec2(b.x - V.Len(8) - ImGui::CalcTextSize(St.m_Out[r].c_str()).x * V.m_Zoom, y - Font * 0.5f), ImGui::GetColorU32(kText), St.m_Out[r]);
             }
             ImGui::PopStyleVar();
-            if (i < 2 || static_cast<int>(i) >= 2 + nPost) continue;            // (the Scene, Last frame and the stages: not edited here)
+            if (St.m_bStage && xlionrender::stage::Bypassable(St.m_Stage))      // a stage's pass: its stage on or bypassed (every pass of the stage shows it)
+            {
+                ImGui::PushID(static_cast<int>(i) + 10000);
+                ImGui::SetCursorScreenPos(ImVec2(b.x - 22, a.y + (V.Len(gl::geo::HEADER_H) - ImGui::GetFrameHeight()) * 0.5f));
+                bool bOn = St.m_bOn;
+                if (ImGui::Checkbox("##stage", &bOn)) Send(std::format("stage {} {}", St.m_Stage, bOn ? 1 : 0));
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", St.m_Tip.c_str());
+                ImGui::PopID();
+            }
+            if (i < 2 || static_cast<int>(i) >= 2 + nPost) continue;            // (the Scene, Last frame and the stages: their menu not here)
             const int n = static_cast<int>(i) - 2;
             ImGui::PushID(n);
             ImGui::SetCursorScreenPos(ImVec2(b.x - 22, a.y + (V.Len(gl::geo::HEADER_H) - ImGui::GetFrameHeight()) * 0.5f));      // the bypass checkbox in the header's right corner
