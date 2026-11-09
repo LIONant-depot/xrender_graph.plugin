@@ -118,6 +118,7 @@ namespace xrender_graph_editor::canvas
                 for (const auto* pList : { &Pa.m_Buffers, &Pa.m_Textures, &Pa.m_Images })
                     for (const auto& B : *pList)
                     {
+                        if (B.m_DeclareIf == "never") continue;                    // (bound only: the pass does not touch it)
                         if (B.m_Life == xlionrender::rg::lifetime::HISTORY) History.insert(B.m_Name);
                         auto& V = B.m_bWrite ? St.m_Out : St.m_In;
                         if (std::find(V.begin(), V.end(), B.m_Name) == V.end()) V.push_back(B.m_Name);
