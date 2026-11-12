@@ -9,6 +9,7 @@
 #include "plugins/xrender_graph.plugin/source/Module/xrender_graph_descriptor.h"
 #include "plugins/xrender_graph.plugin/source/Editor/xrender_graph_canvas.h"
 #include "plugins/xrender_graph.plugin/source/Module/xrender_graph_node_types.h"
+#include "dependencies/xLIONRender/src/xlionrender_env.h"
 
 namespace xrender_graph_editor
 {
@@ -28,7 +29,7 @@ namespace xrender_graph_editor
             if (Edit.starts_with("stage "))      // "stage <name> 0|1": a frame stage bypassed or back (the descriptor lists the ones off)
             {
                 char Name[64] = {}; int On = 1;
-                if (std::sscanf(Edit.c_str() + 6, "%63s %d", Name, &On) != 2) return "not an edit: stage <name> 0|1";
+                if (xlionrender::Scan(Edit.c_str() + 6, "%63s %d", Name, &On) != 2) return "not an edit: stage <name> 0|1";
                 if (!xlionrender::stage::Bypassable(Name)) return std::format("the stage '{}' cannot be bypassed", Name);
                 std::erase_if(D.m_Stages, [&](const auto& S) { return S.m_Name == Name; });
                 if (!On) D.m_Stages.push_back({ Name, false });
@@ -36,7 +37,7 @@ namespace xrender_graph_editor
             else if (Edit.starts_with("insert-custom "))     // "insert-custom <gap> <node type hex>": a shader node (post::Edit knows no node types)
             {
                 int Gap = -1; std::uint64_t Type = 0;
-                if (std::sscanf(Edit.c_str() + 14, "%d %llx", &Gap, reinterpret_cast<unsigned long long*>(&Type)) != 2 || Gap < 0 || Gap > static_cast<int>(D.m_Nodes.size())) return "not an edit: insert-custom <gap> <node type>";
+                if (xlionrender::Scan(Edit.c_str() + 14, "%d %llx", &Gap, reinterpret_cast<unsigned long long*>(&Type)) != 2 || Gap < 0 || Gap > static_cast<int>(D.m_Nodes.size())) return "not an edit: insert-custom <gap> <node type>";
                 auto Cand = D; Cand.m_Nodes.insert(Cand.m_Nodes.begin() + Gap, xrender_graph::node_entry{ xlionrender::post::node_type::CUSTOM, true, Type });
                 if (const auto P = xlionrender::post::Lower(Cand.ToDesc(), 64, 64); !P.m_Error.empty()) return "refused: " + P.m_Error;
                 D.m_Nodes = Cand.m_Nodes;
